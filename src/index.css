@@ -1,0 +1,50 @@
+@import "./styles/fonts.css";
+@import "./styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: var(--bg);
+  }
+
+  body {
+    @apply bg-bg text-text font-sans text-body antialiased;
+  }
+
+  /* Numbers the user reads as data never jitter while they update. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Section label: 12px/500 uppercase, wide tracking, muted. */
+  .label {
+    @apply font-sans text-label font-medium uppercase tracking-label text-text-muted;
+  }
+
+  /* Step title: 24px/600 with tight tracking. */
+  .step-title {
+    @apply font-sans text-title font-semibold tracking-title text-text;
+  }
+}
+
+@layer utilities {
+  /* The one focus treatment used on every interactive element. */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

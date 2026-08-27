@@ -1,0 +1,20 @@
+/*
+ * The single source of truth for colour. Every value here is mirrored into
+ * tailwind.config.js as a named colour. Never write a raw hex or a stock
+ * Tailwind gray anywhere else in the codebase.
+ */
+:root {
+  --bg:          #101218;  /* app background — cool graphite, not pure black */
+  --surface:     #171A22;  /* cards, panels */
+  --surface-2:   #1F2430;  /* inputs, hover states */
+  --border:      #2A303C;  /* hairlines, 1px only */
+  --text:        #E8EAEF;  /* primary text */
+  --text-muted:  #8D95A6;  /* labels, help text, descriptions */
+  --accent:      #E0A742;  /* amber — the single accent */
+  --accent-soft: #E0A74222;/* accent at 13% for fills and highlights */
+  --success:     #5FBF8C;
+  --danger:      #E0715F;
+
+  /* Dark mode only. This makes native controls and scrollbars match. */
+  color-scheme: dark;
+}
