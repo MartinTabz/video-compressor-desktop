@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type { ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FileVideo, Loader2, Music, Upload, VolumeX } from "lucide-react";
 
@@ -13,6 +14,9 @@ import { useFrame } from "../../hooks/useFrame";
 export const ACCEPTED_EXTENSIONS = ["mp4", "mov", "avi", "mkv", "webm", "m4v"];
 
 const UNSUPPORTED = "Tento typ souboru neumím zpracovat. Zkus MP4, MOV nebo AVI.";
+
+/** Drop zone and loaded card are the same height, so nothing jumps on upload. */
+const CARD_HEIGHT = 224;
 
 interface SourceStepProps {
   metadata: VideoMetadata | null;
@@ -60,34 +64,52 @@ export function SourceStep({
     }
   }
 
+  const hasVideo = Boolean(metadata) && !loading;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div
-        className={[
-          "flex flex-col items-center justify-center gap-4 rounded-card border border-dashed px-6 py-12 text-center",
-          "transition-colors duration-hover",
-          isOver ? "border-accent bg-accent-soft" : "border-border bg-surface",
-        ].join(" ")}
-      >
-        {loading ? (
-          <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden="true" />
-        ) : (
-          <Upload className="h-8 w-8 text-text-muted" aria-hidden="true" />
-        )}
+    // The negative bottom margin pulls the wizard buttons closer to the
+    // replace link than the standard section gap would.
+    <div className="-mb-4 flex flex-col gap-4">
+      {hasVideo ? (
+        <VideoInfoCard meta={metadata!} highlight={isOver} />
+      ) : (
+        <div
+          className={[
+            "flex flex-col items-center justify-center gap-4 rounded-card border border-dashed px-6 text-center",
+            "transition-colors duration-hover",
+            isOver ? "border-accent bg-accent-soft" : "border-border bg-surface",
+          ].join(" ")}
+          style={{ height: CARD_HEIGHT }}
+        >
+          {loading ? (
+            <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden="true" />
+          ) : (
+            <Upload className="h-8 w-8 text-text-muted" aria-hidden="true" />
+          )}
 
-        <div className="flex flex-col gap-1">
-          <p className="text-text">
-            {loading ? "Načítám video…" : "Přetáhni sem video"}
-          </p>
-          <p className="text-text-muted">
-            Podporované formáty: MP4, MOV, AVI, MKV, WebM, M4V
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-text">
+              {loading ? "Načítám video…" : "Přetáhni sem video"}
+            </p>
+            <p className="text-text-muted">
+              Podporované formáty: MP4, MOV, AVI, MKV, WebM, M4V
+            </p>
+          </div>
+
+          <Button onClick={pickFile} disabled={loading}>
+            <FileVideo className="h-4 w-4" aria-hidden="true" />
+            Vybrat soubor
+          </Button>
         </div>
+      )}
 
-        <Button onClick={pickFile} disabled={loading}>
-          <FileVideo className="h-4 w-4" aria-hidden="true" />
-          Vybrat soubor
-        </Button>
+      {/* The row exists in both states so the wizard buttons never move. */}
+      <div className="flex h-6 items-center justify-center">
+        {hasVideo && (
+          <button type="button" onClick={pickFile} className="link text-label">
+            Nahrát jiné video
+          </button>
+        )}
       </div>
 
       {error && (
@@ -95,67 +117,84 @@ export function SourceStep({
           {error}
         </p>
       )}
-
-      {metadata && !loading && <VideoInfoCard meta={metadata} />}
     </div>
   );
 }
 
-/** The card that proves the app understood the file. */
-function VideoInfoCard({ meta }: { meta: VideoMetadata }) {
+/** The card that proves the app understood the file. It replaces the drop
+    zone once a video is loaded — only one video is compressed at a time. */
+function VideoInfoCard({
+  meta,
+  highlight,
+}: {
+  meta: VideoMetadata;
+  highlight: boolean;
+}) {
   // A still from the very first moment; a black frame at 0.0 is common, so
   // sample a fraction of a second in.
   const { src } = useFrame(meta, Math.min(0.2, meta.durationSeconds / 2), 0);
 
-  const portrait = meta.orientation === "portrait";
+  const orientationLabel =
+    meta.orientation === "portrait"
+      ? "Na výšku"
+      : meta.orientation === "landscape"
+        ? "Na šířku"
+        : "Čtverec";
 
   return (
-    <div className="flex gap-6 rounded-card border border-border bg-surface p-6">
-      {/* Constrained by height, never by width: a 9:16 still must not become a
-          tower that pushes the facts off the card. */}
+    <div
+      className={[
+        "flex gap-5 rounded-card border bg-surface p-4 transition-colors duration-hover",
+        highlight ? "border-accent bg-accent-soft" : "border-border",
+      ].join(" ")}
+      style={{ height: CARD_HEIGHT }}
+    >
+      {/* A fixed 4:5 window, full card height. The still is contained inside
+          it, so a 9:16 clip and a 16:9 clip sit in the same frame. */}
       <div
-        className="flex shrink-0 items-center justify-center overflow-hidden rounded-input border border-border bg-surface-2"
-        style={{ width: 160, height: 160 }}
+        className="h-full shrink-0 overflow-hidden rounded-input border border-border bg-surface-2"
+        style={{ aspectRatio: "4 / 5" }}
       >
         {src ? (
-          <img
-            src={src}
-            alt=""
-            className="h-full w-full object-contain"
-          />
+          <img src={src} alt="" className="h-full w-full object-contain" />
         ) : (
-          <FileVideo className="h-6 w-6 text-text-muted" aria-hidden="true" />
+          <div className="flex h-full w-full items-center justify-center">
+            <FileVideo className="h-6 w-6 text-text-muted" aria-hidden="true" />
+          </div>
         )}
       </div>
 
-      <dl className="flex min-w-0 flex-1 flex-col gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <dt className="label">Soubor</dt>
-          <dd className="truncate text-text" title={meta.fileName}>
-            {meta.fileName}
-          </dd>
-        </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <p
+          className="truncate font-display text-subtitle font-bold tracking-title text-text"
+          title={meta.fileName}
+        >
+          {meta.fileName}
+        </p>
 
-        <div className="grid grid-cols-2 gap-3">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
           <Fact label="Velikost" value={formatBytes(meta.fileSizeBytes)} />
           <Fact label="Délka" value={formatDuration(meta.durationSeconds)} />
           <Fact
             label="Rozlišení"
             value={formatDimensions(meta.width, meta.height)}
-            badge={portrait ? "Na výšku" : meta.orientation === "landscape" ? "Na šířku" : "Čtverec"}
+            badge={orientationLabel}
           />
           <Fact label="Plynulost" value={formatFps(meta.fps)} />
-        </div>
-
-        <div className="flex items-center gap-2 text-text-muted">
-          {meta.hasAudio ? (
-            <Music className="h-4 w-4" aria-hidden="true" />
-          ) : (
-            <VolumeX className="h-4 w-4" aria-hidden="true" />
-          )}
-          <span>{meta.hasAudio ? "Obsahuje zvuk" : "Bez zvukové stopy"}</span>
-        </div>
-      </dl>
+          <Fact
+            label="Zvuk"
+            value={meta.hasAudio ? "Obsahuje zvuk" : "Bez zvuku"}
+            icon={
+              meta.hasAudio ? (
+                <Music className="h-4 w-4 text-text-muted" aria-hidden="true" />
+              ) : (
+                <VolumeX className="h-4 w-4 text-text-muted" aria-hidden="true" />
+              )
+            }
+            mono={false}
+          />
+        </dl>
+      </div>
     </div>
   );
 }
@@ -164,18 +203,25 @@ function Fact({
   label,
   value,
   badge,
+  icon,
+  mono = true,
 }: {
   label: string;
   value: string;
   badge?: string;
+  icon?: ReactNode;
+  mono?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-0.5">
       <dt className="label">{label}</dt>
       <dd className="flex items-center gap-2">
-        <span className="font-mono text-text">{value}</span>
+        {icon}
+        <span className={mono ? "truncate font-mono text-text" : "truncate text-text"}>
+          {value}
+        </span>
         {badge && (
-          <span className="rounded-full border border-accent bg-accent-soft px-2 py-0.5 text-label text-accent">
+          <span className="shrink-0 rounded-full border border-accent bg-accent-soft px-2 py-0.5 text-label text-accent">
             {badge}
           </span>
         )}

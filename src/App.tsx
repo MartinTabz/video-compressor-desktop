@@ -46,6 +46,7 @@ export default function App() {
   const meta = state.metadata;
   const valid = isStepValid(state, state.step);
   const onLastStep = state.step === "summary";
+  const onFirstStep = stepIndex(state.step) === 0;
   const running = state.step === "progress";
 
   const definition = STEPS[stepIndex(state.step)];
@@ -143,15 +144,20 @@ export default function App() {
         </section>
 
         {!running && (
-          <footer className="flex items-center justify-between gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => dispatch({ type: "back" })}
-              disabled={stepIndex(state.step) === 0}
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Zpět
-            </Button>
+          <footer
+            className={[
+              "flex items-center gap-4",
+              // Nothing to go back to on the first step, so the button is not
+              // there at all and „Pokračovat" keeps its right edge.
+              onFirstStep ? "justify-end" : "justify-between",
+            ].join(" ")}
+          >
+            {!onFirstStep && (
+              <Button variant="ghost" onClick={() => dispatch({ type: "back" })}>
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Zpět
+              </Button>
+            )}
 
             {!onLastStep && (
               <Button

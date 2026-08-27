@@ -57,6 +57,8 @@ export default {
       fontSize: {
         label: ["12px", "16px"],
         body: ["14px", "20px"],
+        // The file name on the source card: display face, one step above body.
+        subtitle: ["18px", "24px"],
         title: ["24px", "30px"],
         // The one number that gets the ExtraBold display treatment.
         figure: ["32px", "36px"],
