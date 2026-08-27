@@ -35,7 +35,12 @@ export function SelectCard({
       ].join(" ")}
     >
       <span className="flex items-center justify-between gap-3">
-        <span className={selected ? "font-medium text-accent" : "font-medium text-text"}>
+        <span
+          className={[
+            "font-display text-subtitle font-medium",
+            selected ? "text-accent" : "text-text",
+          ].join(" ")}
+        >
           {title}
         </span>
         {badge}

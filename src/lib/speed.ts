@@ -41,7 +41,7 @@ export const SPEED_OPTIONS: SpeedOption[] = [
   },
 ];
 
-/** Reassurance that this setting is not the quality setting. */
+/** Reassurance that this setting is not the quality setting. Shown as the step hint. */
 export const SPEED_NOTE =
   "Tohle nastavení neovlivňuje kvalitu obrazu, jen jak dlouho aplikace hledá způsoby, jak soubor zmenšit.";
 

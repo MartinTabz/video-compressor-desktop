@@ -18,6 +18,7 @@ import { SummaryStep } from "./components/steps/SummaryStep";
 import { useEncoder } from "./hooks/useEncoder";
 import { useVideoMetadata } from "./hooks/useVideoMetadata";
 import { baseName } from "./lib/format";
+import { SPEED_NOTE } from "./lib/speed";
 import {
   STEPS,
   configFromState,
@@ -262,7 +263,7 @@ export default function App() {
 /** One quiet sentence under each step title. Not every step needs one. */
 const STEP_HINTS: Partial<Record<StepId, string>> = {
   source: "Přetáhni video do okna, nebo ho vyber v počítači.",
-  speed: "Jak dlouho si aplikace může hrát s hledáním úspor.",
+  speed: SPEED_NOTE,
   audio: "Co se má stát se zvukovou stopou.",
   output: "Kam soubor uložit a jestli k němu chceš i náhledový obrázek.",
   summary: "Zkontroluj nastavení a spusť kompresi.",
