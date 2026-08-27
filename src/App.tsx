@@ -260,7 +260,6 @@ export default function App() {
 function StepHint({ step }: { step: StepId }) {
   const hints: Partial<Record<StepId, string>> = {
     source: "Přetáhni video do okna, nebo ho vyber v počítači.",
-    resolution: "Jak velký má být obraz na webu.",
     framerate: "Kolik snímků za sekundu má výsledné video mít.",
     quality: "Čím níž, tím menší soubor. Rozdíl bývá menší, než čekáš.",
     speed: "Jak dlouho si aplikace může hrát s hledáním úspor.",
