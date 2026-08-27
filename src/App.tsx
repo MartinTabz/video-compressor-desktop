@@ -1,278 +1,315 @@
-import { useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, FileVideo, Loader2 } from "lucide-react";
+import { useCallback, useMemo, useReducer, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
+import type { StepId } from "./types";
+import { Stepper } from "./components/Stepper";
+import { Button } from "./components/ui/Button";
+import { AudioStep } from "./components/steps/AudioStep";
+import { FrameRateStep } from "./components/steps/FrameRateStep";
+import { OutputStep } from "./components/steps/OutputStep";
+import { ProgressStep } from "./components/steps/ProgressStep";
+import { QualityStep } from "./components/steps/QualityStep";
+import { ResolutionStep } from "./components/steps/ResolutionStep";
+import { SourceStep, hasAcceptedExtension } from "./components/steps/SourceStep";
+import { SpeedStep } from "./components/steps/SpeedStep";
+import { SummaryStep } from "./components/steps/SummaryStep";
+import { useEncoder } from "./hooks/useEncoder";
 import { useVideoMetadata } from "./hooks/useVideoMetadata";
-import { buildArgs, toCommandString } from "./lib/ffmpegArgs";
+import { baseName } from "./lib/format";
+import { estimateSizeForConfig } from "./lib/size";
 import {
-  dimensionsForLongerSide,
-  resolutionPresets,
-} from "./lib/orientation";
-import { DEFAULT_QUALITY_PERCENT, crfFromQuality, qualityBand } from "./lib/quality";
-import { estimateSizeForConfig, formatBytes, formatEstimate } from "./lib/size";
-import type { EncodeConfig, Orientation, VideoMetadata } from "./types";
+  STEPS,
+  configFromState,
+  initialState,
+  isStepValid,
+  stepIndex,
+  wizardReducer,
+} from "./lib/wizard";
 
 /**
- * Phase 2 debug screen. Disposable — phase 3 replaces it with the wizard.
- *
- * Its only job is to let a human check the orientation math against real
- * files: what came out of ffprobe, what the presets resolve to, and the exact
- * command that would run.
+ * The wizard shell: one step on screen at a time, a stepper above it and the
+ * two navigation buttons below. Every decision about what may happen next
+ * comes out of `lib/wizard.ts`; this file only draws it.
  */
 
-/** The target used for the headline sanity check: 540p, i.e. 960 on the long edge. */
-const SANITY_CHECK_TARGET = 960;
-
-const ORIENTATION_LABEL: Record<Orientation, string> = {
-  portrait: "PORTRAIT — na výšku",
-  landscape: "LANDSCAPE — na šířku",
-  square: "SQUARE — čtverec",
-};
+const UNSUPPORTED = "Tento typ souboru neumím zpracovat. Zkus MP4, MOV nebo AVI.";
 
 export default function App() {
-  const { metadata, loading, error, probe } = useVideoMetadata();
-  const [pickError, setPickError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(wizardReducer, initialState);
+  const { loading, error: probeError, probe, reset: resetProbe } = useVideoMetadata();
+  const encoder = useEncoder();
 
-  async function pickFile() {
-    setPickError(null);
+  const [uiError, setUiError] = useState<string | null>(null);
+  const [overwriteAsked, setOverwriteAsked] = useState(false);
+
+  const meta = state.metadata;
+  const valid = isStepValid(state, state.step);
+  const onLastStep = state.step === "summary";
+  const running = state.step === "progress";
+
+  const definition = STEPS[stepIndex(state.step)];
+
+  const pickFile = useCallback(
+    async (path: string) => {
+      setUiError(null);
+      if (!hasAcceptedExtension(path)) {
+        setUiError(UNSUPPORTED);
+        return;
+      }
+      const metadata = await probe(path);
+      if (metadata) dispatch({ type: "metadataLoaded", metadata });
+    },
+    [probe],
+  );
+
+  const config = useMemo(() => configFromState(state), [state]);
+
+  /** Runs the encode for real — or, in this phase, convincingly pretends to. */
+  const runEncode = useCallback(() => {
+    if (!config || !meta) return;
+    setOverwriteAsked(false);
+
+    encoder.start(config, {
+      durationSeconds: meta.durationSeconds,
+      originalSizeBytes: meta.fileSizeBytes,
+      estimatedSizeBytes: estimateSizeForConfig(config, {
+        width: meta.width,
+        height: meta.height,
+        fps: state.fps,
+        durationSeconds: meta.durationSeconds,
+      }),
+      poster: state.poster,
+    });
+
+    dispatch({ type: "goToStep", step: "progress" });
+  }, [config, meta, encoder, state.fps, state.poster]);
+
+  /** The final button: asks before it would overwrite something. */
+  async function startEncode() {
+    if (!config) return;
+
     try {
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        filters: [{ name: "Video", extensions: ["mp4", "mov", "avi", "mkv", "webm", "m4v"] }],
-      });
-      if (typeof selected === "string") {
-        await probe(selected);
+      const exists = await invoke<boolean>("file_exists", { path: config.outputPath });
+      if (exists) {
+        setOverwriteAsked(true);
+        return;
       }
     } catch (cause) {
-      console.error("file dialog failed:", cause);
-      setPickError("Nepodařilo se otevřít dialog pro výběr souboru.");
+      // A failed existence check must not block the encode; ffmpeg overwrites
+      // anyway and the user would only see an unexplained dead button.
+      console.error("file_exists failed:", cause);
     }
+
+    runEncode();
+  }
+
+  function startOver() {
+    encoder.reset();
+    resetProbe();
+    setUiError(null);
+    dispatch({ type: "reset" });
+  }
+
+  /**
+   * Enter advances the wizard, so the whole thing can be driven from the
+   * keyboard. Buttons and links keep their own meaning for the key.
+   */
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" || event.defaultPrevented || running) return;
+
+    const target = event.target as HTMLElement;
+    if (target.closest("button") || target.closest("a")) return;
+    if (!valid) return;
+
+    event.preventDefault();
+    if (onLastStep) void startEncode();
+    else dispatch({ type: "next" });
   }
 
   return (
-    <main className="min-h-screen bg-bg px-6 py-16">
-      <div className="mx-auto flex max-w-content flex-col gap-8">
-        <header className="flex flex-col gap-3">
-          <p className="label">Fáze 2 — ladicí obrazovka</p>
-          <h1 className="step-title">Kontrola metadat</h1>
-          <p className="text-text-muted">
-            Dočasná obrazovka pro ověření orientace a výpočtu rozměrů na
-            skutečných souborech.
-          </p>
-        </header>
+    <main className="min-h-screen bg-bg px-6 py-10" onKeyDown={handleKeyDown}>
+      <div className="mx-auto flex max-w-content flex-col gap-10">
+        {!running && <Stepper state={state} onJump={(step) => dispatch({ type: "goToStep", step })} />}
 
-        <button
-          type="button"
-          onClick={pickFile}
-          disabled={loading}
-          className="focus-ring inline-flex items-center justify-center gap-2 self-start rounded-card bg-accent px-5 py-3 font-medium text-bg transition-colors duration-hover hover:bg-accent-soft hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+        <section
+          // Re-keying on the step is what makes the transition play: React
+          // remounts the panel, and the animation runs from its first frame.
+          key={state.step}
+          className="animate-step flex flex-col gap-8"
         >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <FileVideo className="h-4 w-4" aria-hidden="true" />
-          )}
-          {loading ? "Načítám…" : "Vybrat video"}
-        </button>
+          <header className="flex flex-col gap-1">
+            <h1 className="step-title">
+              {running ? "Průběh" : (definition?.title ?? "")}
+            </h1>
+            {!running && <StepHint step={state.step} />}
+          </header>
 
-        {(error ?? pickError) && (
-          <div
-            role="status"
-            className="flex items-start gap-3 rounded-input border border-border bg-surface-2 p-4"
-          >
-            <AlertTriangle className="h-5 w-5 text-danger" aria-hidden="true" />
-            <p className="text-text-muted">{error ?? pickError}</p>
-          </div>
+          {renderStep()}
+        </section>
+
+        {!running && (
+          <footer className="flex items-center justify-between gap-4">
+            <Button
+              variant="ghost"
+              onClick={() => dispatch({ type: "back" })}
+              disabled={stepIndex(state.step) === 0}
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Zpět
+            </Button>
+
+            {!onLastStep && (
+              <Button
+                variant="primary"
+                onClick={() => dispatch({ type: "next" })}
+                disabled={!valid}
+              >
+                Pokračovat
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
+          </footer>
         )}
-
-        {metadata && <Report meta={metadata} />}
       </div>
+
+      {overwriteAsked && config && (
+        <OverwriteDialog
+          fileName={baseName(config.outputPath)}
+          onOverwrite={runEncode}
+          onRename={() => {
+            setOverwriteAsked(false);
+            dispatch({ type: "goToStep", step: "output" });
+          }}
+        />
+      )}
     </main>
   );
+
+  function renderStep() {
+    switch (state.step) {
+      case "source":
+        return (
+          <SourceStep
+            metadata={meta}
+            loading={loading}
+            error={uiError ?? probeError}
+            onPick={pickFile}
+            onError={setUiError}
+          />
+        );
+
+      case "resolution":
+        return meta ? (
+          <ResolutionStep state={state} meta={meta} dispatch={dispatch} />
+        ) : null;
+
+      case "framerate":
+        return meta ? (
+          <FrameRateStep state={state} meta={meta} dispatch={dispatch} />
+        ) : null;
+
+      case "quality":
+        return meta ? (
+          <QualityStep state={state} meta={meta} dispatch={dispatch} />
+        ) : null;
+
+      case "speed":
+        return <SpeedStep state={state} dispatch={dispatch} />;
+
+      case "audio":
+        return <AudioStep state={state} dispatch={dispatch} />;
+
+      case "output":
+        return meta ? (
+          <OutputStep
+            state={state}
+            meta={meta}
+            dispatch={dispatch}
+            onError={setUiError}
+          />
+        ) : null;
+
+      case "summary":
+        return meta ? (
+          <SummaryStep
+            state={state}
+            meta={meta}
+            onEdit={(step) => dispatch({ type: "goToStep", step })}
+            onStart={startEncode}
+          />
+        ) : null;
+
+      case "progress":
+        return meta ? (
+          <ProgressStep
+            state={state}
+            meta={meta}
+            encoder={encoder}
+            onBackToSummary={() => {
+              encoder.reset();
+              dispatch({ type: "goToStep", step: "summary" });
+            }}
+            onStartOver={startOver}
+          />
+        ) : null;
+    }
+  }
 }
 
-function Report({ meta }: { meta: VideoMetadata }) {
-  const presets = useMemo(() => resolutionPresets(meta), [meta]);
+/** One quiet sentence under each step title. */
+function StepHint({ step }: { step: StepId }) {
+  const hints: Partial<Record<StepId, string>> = {
+    source: "Přetáhni video do okna, nebo ho vyber v počítači.",
+    resolution: "Jak velký má být obraz na webu.",
+    framerate: "Kolik snímků za sekundu má výsledné video mít.",
+    quality: "Čím níž, tím menší soubor. Rozdíl bývá menší, než čekáš.",
+    speed: "Jak dlouho si aplikace může hrát s hledáním úspor.",
+    audio: "Co se má stát se zvukovou stopou.",
+    output: "Kam soubor uložit a jestli k němu chceš i náhledový obrázek.",
+    summary: "Zkontroluj nastavení a spusť kompresi.",
+  };
 
-  const sanity = useMemo(
-    () => dimensionsForLongerSide(meta, SANITY_CHECK_TARGET),
-    [meta],
-  );
-
-  const config = useMemo<EncodeConfig>(
-    () => ({
-      inputPath: meta.path,
-      outputPath: outputPathFor(meta.path),
-      width: sanity.width,
-      height: sanity.height,
-      qualityPercent: DEFAULT_QUALITY_PERCENT,
-      speed: "slow",
-      audio: meta.hasAudio ? "speech" : "none",
-      hasAudio: meta.hasAudio,
-    }),
-    [meta, sanity],
-  );
-
-  const command = useMemo(() => toCommandString(buildArgs(config)), [config]);
-  const estimate = useMemo(() => estimateSizeForConfig(config, meta), [config, meta]);
-
-  const swapped = meta.rotation % 180 === 90;
-
-  return (
-    <div className="flex flex-col gap-8">
-      <OrientationBadge orientation={meta.orientation} />
-
-      <Section title="Metadata">
-        <dl className="flex flex-col">
-          <Row label="Soubor" value={meta.fileName} />
-          <Row label="Velikost" value={formatBytes(meta.fileSizeBytes)} mono />
-          <Row
-            label="Rozměry na obrazovce"
-            value={`${meta.width} × ${meta.height}`}
-            mono
-            emphasis
-          />
-          <Row
-            label="Rozměry ve streamu"
-            value={`${meta.streamWidth} × ${meta.streamHeight}${swapped ? "  (prohozeno)" : ""}`}
-            mono
-          />
-          <Row label="Rotace" value={`${meta.rotation}°`} mono />
-          <Row label="Poměr stran" value={meta.aspectRatio.toFixed(4)} mono />
-          <Row label="Snímků za sekundu" value={`${meta.fps} fps`} mono />
-          <Row label="Délka" value={formatDuration(meta.durationSeconds)} mono />
-          <Row label="Obrazový kodek" value={meta.videoCodec ?? "—"} mono />
-          <Row
-            label="Zvuk"
-            value={meta.hasAudio ? (meta.audioCodec ?? "ano") : "žádný zvuk"}
-            mono
-          />
-          <Row label="Cesta" value={meta.path} />
-        </dl>
-      </Section>
-
-      <Section title="Rozlišení">
-        <dl className="flex flex-col">
-          {presets.map((preset) => (
-            <Row
-              key={preset.id}
-              label={preset.label}
-              value={`${preset.width} × ${preset.height}   (delší strana ${preset.targetLongerSide})`}
-              mono
-            />
-          ))}
-        </dl>
-      </Section>
-
-      <Section title={`Kontrola — cíl ${SANITY_CHECK_TARGET} na delší straně`}>
-        <p className="font-mono text-text">
-          scale={sanity.width}:{sanity.height}
-        </p>
-        <p className="text-text-muted">
-          {sanity.width <= meta.width && sanity.height <= meta.height
-            ? "Zmenšeno správně — ani jedna strana nepřesahuje zdroj."
-            : "CHYBA: výstup je větší než zdroj."}
-        </p>
-      </Section>
-
-      <Section title="Výchozí nastavení">
-        <dl className="flex flex-col">
-          <Row
-            label="Kvalita"
-            value={`${DEFAULT_QUALITY_PERCENT} % — ${qualityBand(DEFAULT_QUALITY_PERCENT).label} (CRF ${crfFromQuality(DEFAULT_QUALITY_PERCENT)})`}
-          />
-          <Row label="Rychlost" value="slow" mono />
-          <Row label="Zvuk" value={config.hasAudio ? "mluvené slovo" : "bez zvuku"} />
-          <Row label="Odhad velikosti" value={formatEstimate(estimate)} mono emphasis />
-        </dl>
-      </Section>
-
-      <Section title="Příkaz">
-        <pre className="overflow-x-auto rounded-input border border-border bg-surface-2 p-4 font-mono text-label leading-5 text-text">
-          {command}
-        </pre>
-        <button
-          type="button"
-          onClick={() => void navigator.clipboard.writeText(command)}
-          className="focus-ring self-start rounded-input border border-border px-4 py-2 text-text-muted transition-colors duration-hover hover:bg-surface-2 hover:text-text"
-        >
-          Kopírovat
-        </button>
-      </Section>
-    </div>
-  );
+  const hint = hints[step];
+  return hint ? <p className="text-text-muted">{hint}</p> : null;
 }
 
-function OrientationBadge({ orientation }: { orientation: Orientation }) {
-  return (
-    <div className="flex items-center gap-4 rounded-card border border-border bg-surface p-6">
-      <span
-        aria-hidden="true"
-        className={`shrink-0 rounded-input border border-accent bg-accent-soft ${
-          orientation === "portrait"
-            ? "h-16 w-9"
-            : orientation === "landscape"
-              ? "h-9 w-16"
-              : "h-12 w-12"
-        }`}
-      />
-      <p className="font-mono text-title font-semibold tracking-title text-accent">
-        {ORIENTATION_LABEL[orientation]}
-      </p>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 rounded-card border border-border bg-surface p-6">
-      <h2 className="label">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function Row({
-  label,
-  value,
-  mono = false,
-  emphasis = false,
+/** „Soubor už existuje" — the one modal in the app. */
+function OverwriteDialog({
+  fileName,
+  onOverwrite,
+  onRename,
 }: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  emphasis?: boolean;
+  fileName: string;
+  onOverwrite: () => void;
+  onRename: () => void;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border py-2 last:border-b-0">
-      <dt className="shrink-0 text-text-muted">{label}</dt>
-      <dd
-        className={`min-w-0 break-all text-right ${mono ? "font-mono" : ""} ${
-          emphasis ? "text-accent" : "text-text"
-        }`}
+    <div className="fixed inset-0 flex items-center justify-center bg-overlay px-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="overwrite-title"
+        className="flex w-full max-w-content flex-col gap-6 rounded-card border border-border bg-surface p-6"
       >
-        {value}
-      </dd>
+        <div className="flex flex-col gap-2">
+          <h2 id="overwrite-title" className="step-title">
+            Soubor už existuje
+          </h2>
+          <p className="text-text-muted">
+            V cílové složce už je soubor <span className="font-mono text-text">{fileName}</span>.
+            Co s ním?
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <Button onClick={onRename}>Zvolit jiný název</Button>
+          <Button variant="primary" onClick={onOverwrite}>
+            Přepsat
+          </Button>
+        </div>
+      </div>
     </div>
   );
-}
-
-/** `clip.mov` → `clip-web.mp4`, next to the original. Placeholder until step 8. */
-function outputPathFor(inputPath: string): string {
-  const separator = inputPath.includes("\\") ? "\\" : "/";
-  const cut = inputPath.lastIndexOf(separator);
-  const directory = cut === -1 ? "" : inputPath.slice(0, cut + 1);
-  const fileName = cut === -1 ? inputPath : inputPath.slice(cut + 1);
-  const dot = fileName.lastIndexOf(".");
-  const stem = dot === -1 ? fileName : fileName.slice(0, dot);
-  return `${directory}${stem}-web.mp4`;
-}
-
-/** `41` → `0:41`, `125` → `2:05`. */
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
-  const total = Math.round(seconds);
-  const minutes = Math.floor(total / 60);
-  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
 }

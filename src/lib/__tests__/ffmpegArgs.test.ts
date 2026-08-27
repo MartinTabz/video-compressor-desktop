@@ -10,6 +10,7 @@ function config(overrides: Partial<EncodeConfig> = {}): EncodeConfig {
     outputPath: "/Users/me/Movies/clip-web.mp4",
     width: 540,
     height: 960,
+    fps: null,
     qualityPercent: 40,
     speed: "slow",
     audio: "speech",
@@ -24,6 +25,20 @@ describe("buildArgs", () => {
     const scale = args[args.indexOf("-vf") + 1];
     expect(scale).toBe("scale=540:960");
     expect(scale).not.toContain("-2");
+  });
+
+  it("omits -r when the user kept the source frame rate", () => {
+    expect(buildArgs(config({ fps: null }))).not.toContain("-r");
+  });
+
+  it("emits -r when the frame rate was lowered", () => {
+    const args = buildArgs(config({ fps: 24 }));
+    expect(args[args.indexOf("-r") + 1]).toBe("24");
+  });
+
+  it("keeps two decimals of an NTSC rate", () => {
+    const args = buildArgs(config({ fps: 29.97 }));
+    expect(args[args.indexOf("-r") + 1]).toBe("29.97");
   });
 
   it("carries every non-negotiable flag", () => {

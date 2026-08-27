@@ -16,6 +16,7 @@ export default {
       "text-muted": "var(--text-muted)",
       accent: "var(--accent)",
       "accent-soft": "var(--accent-soft)",
+      overlay: "var(--overlay)",
       success: "var(--success)",
       danger: "var(--danger)",
     },

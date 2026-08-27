@@ -32,19 +32,81 @@
   }
 }
 
+@layer components {
+  /*
+   * The range input's own track is invisible: Slider draws it out of divs so
+   * the quality step can colour the recommended band. Only the thumb is left.
+   */
+  .range-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 16px;
+    width: 16px;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+
+  .range-input::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border-radius: 9999px;
+    background-color: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+
+  .range-input::-moz-range-track {
+    background-color: transparent;
+  }
+}
+
 @layer utilities {
+  /* Step transition: 200ms fade plus an 8px slide. Nothing longer. */
+  .animate-step {
+    animation: step-in 200ms ease-out;
+  }
   /* The one focus treatment used on every interactive element. */
   .focus-ring {
     @apply outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
   }
 }
 
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/*
+ * Reduced motion keeps the fade — it carries the "something changed" signal —
+ * and drops everything that moves: the step slide and the shape proxy morph.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .animate-step {
+    animation-name: step-fade;
+  }
+
+  .duration-shape {
+    transition-property: opacity, background-color, border-color, color;
+  }
+
+  .animate-spin {
+    animation-duration: 1.6s;
+  }
+}
+
+@keyframes step-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

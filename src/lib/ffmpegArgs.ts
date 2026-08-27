@@ -36,6 +36,7 @@ export function buildArgs(config: EncodeConfig): string[] {
     config.inputPath,
     "-vf",
     scale,
+    ...frameRateArgs(config),
     ...ALWAYS,
     "-preset",
     config.speed,
@@ -51,6 +52,18 @@ export function buildArgs(config: EncodeConfig): string[] {
     "-nostats",
     config.outputPath,
   ];
+}
+
+/**
+ * Frame rate. Omitted entirely when the user left the slider at the source
+ * rate: `-r` at the source value would resample for no reason.
+ */
+function frameRateArgs(config: EncodeConfig): string[] {
+  if (config.fps === null || !Number.isFinite(config.fps) || config.fps <= 0) {
+    return [];
+  }
+  // One decimal is enough for 29.97 and friends, and keeps the command legible.
+  return ["-r", String(Math.round(config.fps * 100) / 100)];
 }
 
 /**

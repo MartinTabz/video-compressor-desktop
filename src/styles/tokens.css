@@ -12,6 +12,7 @@
   --text-muted:  #8D95A6;  /* labels, help text, descriptions */
   --accent:      #E0A742;  /* amber — the single accent */
   --accent-soft: #E0A74222;/* accent at 13% for fills and highlights */
+  --overlay:     #101218CC;/* modal scrim — the background at 80% */
   --success:     #5FBF8C;
   --danger:      #E0715F;
 

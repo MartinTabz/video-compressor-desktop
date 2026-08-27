@@ -1,6 +1,7 @@
 // Prevents an additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod media;
 mod probe;
 
 fn main() {
@@ -8,7 +9,13 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe::check_ffmpeg, probe::probe_video])
+        .invoke_handler(tauri::generate_handler![
+            probe::check_ffmpeg,
+            probe::probe_video,
+            media::extract_frame,
+            media::file_exists,
+            media::reveal_in_file_manager,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

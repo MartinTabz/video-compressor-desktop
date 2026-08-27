@@ -11,11 +11,32 @@ import { crfFromQuality } from "./quality";
  */
 
 /**
- * Bits per pixel at CRF 23 for typical talking-head footage. Derived from
- * 1920×1080 @ 30 fps landing around 4.5 Mbit/s.
+ * Bits per pixel at CRF 23, measured rather than guessed.
+ *
+ * Four real clips encoded at the app defaults imply 0.013 / 0.052 / 0.054 /
+ * 0.070 — see `size.calibration.test.ts`. The old 0.072 sat above every one of
+ * them, so the estimate was never once too low; 0.050 sits in the middle of
+ * real footage that is not heavily downscaled.
  */
-const BITS_PER_PIXEL_AT_REFERENCE_CRF = 0.072;
+const BITS_PER_PIXEL_AT_REFERENCE_CRF = 0.05;
 const REFERENCE_CRF = 23;
+
+/**
+ * How far a source can shrink before its pixels get cheaper.
+ *
+ * Up to a quarter of the original pixel count the footage keeps its detail and
+ * each pixel costs about the same. Past that — a 4K phone clip going to 540p,
+ * the app's main scenario — the sensor grain that x264 was spending most of its
+ * bits on is averaged away by the scaler, and the file collapses. Without this
+ * term that case came out 4.4× over.
+ */
+const DOWNSCALE_KNEE = 4;
+
+/**
+ * Beyond the knee the bits stay roughly flat as the pixels fall away, which is
+ * what an exponent of 1 expresses: half the pixels, twice the bits each.
+ */
+const DOWNSCALE_EXPONENT = 1;
 
 /** x264 rate roughly halves for every 6 steps of CRF. */
 const CRF_STEPS_PER_HALVING = 6;
@@ -41,6 +62,11 @@ const CONTAINER_OVERHEAD = 1.02;
 export interface SizeEstimateInput {
   width: number;
   height: number;
+  /**
+   * Source pixel count, for the downscale correction. Omitted means "no
+   * downscaling", which is the safe reading: no discount is applied.
+   */
+  sourcePixels?: number;
   fps: number;
   crf: number;
   durationSeconds: number;
@@ -63,6 +89,7 @@ export function estimateSizeBytes(input: SizeEstimateInput): number {
 
   const bitsPerPixel =
     BITS_PER_PIXEL_AT_REFERENCE_CRF *
+    downscaleFactor(input.sourcePixels ?? width * height, width * height) *
     Math.pow(2, (REFERENCE_CRF - crf) / CRF_STEPS_PER_HALVING);
 
   const videoBits =
@@ -74,16 +101,49 @@ export function estimateSizeBytes(input: SizeEstimateInput): number {
   return Math.round(totalBits / 8);
 }
 
+/**
+ * How much cheaper each output pixel is, given how far the source shrank.
+ *
+ * `1` means no discount. Upscaling — which the app forbids anyway — is also 1;
+ * inventing extra bits for pixels that carry no new detail would be wrong in
+ * the opposite direction.
+ */
+export function downscaleFactor(
+  sourcePixels: number,
+  outputPixels: number,
+): number {
+  if (
+    !Number.isFinite(sourcePixels) ||
+    !Number.isFinite(outputPixels) ||
+    outputPixels <= 0 ||
+    sourcePixels <= outputPixels
+  ) {
+    return 1;
+  }
+
+  const ratio = sourcePixels / outputPixels;
+  if (ratio <= DOWNSCALE_KNEE) return 1;
+
+  return Math.pow(ratio / DOWNSCALE_KNEE, -DOWNSCALE_EXPONENT);
+}
+
 /** Same estimate, driven straight off an `EncodeConfig` plus source facts. */
 export function estimateSizeForConfig(
   config: EncodeConfig,
-  source: { fps: number; durationSeconds: number },
+  source: {
+    /** Source display dimensions — the downscale term needs both pairs. */
+    width: number;
+    height: number;
+    fps: number;
+    durationSeconds: number;
+  },
 ): number {
   const audioMode: AudioMode = config.hasAudio ? config.audio : "none";
 
   return estimateSizeBytes({
     width: config.width,
     height: config.height,
+    sourcePixels: source.width * source.height,
     fps: source.fps,
     crf: crfFromQuality(config.qualityPercent),
     durationSeconds: source.durationSeconds,

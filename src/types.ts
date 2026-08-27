@@ -62,10 +62,63 @@ export interface EncodeConfig {
   /** Both must already be even and within the source bounds. */
   width: number;
   height: number;
+  /**
+   * Target frame rate, or `null` to leave the source rate alone. The wizard
+   * nulls it whenever the slider sits at the source ceiling, so an untouched
+   * setting never emits `-r`.
+   */
+  fps: number | null;
   /** 0–100, never a CRF number. */
   qualityPercent: number;
   speed: SpeedPreset;
   audio: AudioMode;
   /** When the source is silent the audio step is skipped entirely. */
   hasAudio: boolean;
+}
+
+/** The optional still image saved alongside the video. */
+export interface PosterConfig {
+  enabled: boolean;
+  /** Where in the video the frame is taken from. */
+  timeSeconds: number;
+  /** A second copy in WebP, roughly half the size. */
+  alsoWebp: boolean;
+}
+
+/** The steps of the wizard, in order. */
+export type StepId =
+  | "source"
+  | "resolution"
+  | "framerate"
+  | "quality"
+  | "speed"
+  | "audio"
+  | "output"
+  | "summary"
+  | "progress";
+
+/**
+ * Everything the wizard holds. Distinct from `EncodeConfig` because the UI
+ * needs a few things the encoder does not: which question is on screen, the
+ * aspect lock, and the two halves of the audio question before they collapse
+ * into an `AudioMode`.
+ */
+export interface WizardState {
+  step: StepId;
+  /** How far the user has got — earlier steps stay clickable in the stepper. */
+  furthestStep: StepId;
+  metadata: VideoMetadata | null;
+  width: number;
+  height: number;
+  lockAspect: boolean;
+  /** Always concrete; `configFromState` decides whether it reaches ffmpeg. */
+  fps: number;
+  qualityPercent: number;
+  speed: SpeedPreset;
+  /** „Potřebuje video zvuk?" — null until answered. */
+  audioWanted: boolean | null;
+  /** „Je ve videu hudba?" — null until answered. */
+  audioMusic: boolean | null;
+  outputPath: string;
+  poster: PosterConfig;
 }
