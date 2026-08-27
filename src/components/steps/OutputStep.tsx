@@ -5,7 +5,9 @@ import type { VideoMetadata, WizardState } from "../../types";
 import type { WizardAction } from "../../lib/wizard";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
+import { Segmented } from "../ui/Segmented";
 import { Slider } from "../ui/Slider";
+import { POSTER_FORMATS } from "../../lib/poster";
 import {
   baseName,
   defaultOutputName,
@@ -71,19 +73,11 @@ export function OutputStep({ state, meta, dispatch, onError }: OutputStepProps) 
         <Checkbox
           checked={state.poster.enabled}
           onChange={(enabled) => dispatch({ type: "setPosterEnabled", enabled })}
-          label="Uložit i náhledový obrázek (poster)"
-          description="Obrázek, který se na webu zobrazí, než uživatel spustí video."
+          label="Uložit i náhledový obrázek"
         >
           {state.poster.enabled && (
-            <div className="flex animate-step flex-col gap-6 rounded-card border border-border bg-surface p-4">
+            <div className="animate-step rounded-card border border-border bg-surface p-4">
               <PosterPicker state={state} meta={meta} dispatch={dispatch} />
-
-              <Checkbox
-                checked={state.poster.alsoWebp}
-                onChange={(enabled) => dispatch({ type: "setPosterWebp", enabled })}
-                label="Uložit poster i jako WebP"
-                description="Moderní formát, který je o polovinu menší. Podporují ho všechny současné prohlížeče."
-              />
             </div>
           )}
         </Checkbox>
@@ -108,11 +102,11 @@ function PosterPicker({
   const max = Math.max(0.1, meta.durationSeconds - 0.05);
 
   return (
-    <div className="flex items-start gap-6">
-      {/* Height-constrained: a 9:16 poster must not stretch the panel. */}
+    <div className="flex items-stretch gap-6">
+      {/* Stretches to whatever the controls need, so the card has no dead space. */}
       <div
         className="flex shrink-0 items-center justify-center overflow-hidden rounded-input border border-border bg-surface-2"
-        style={{ width: 120, height: 180 }}
+        style={{ aspectRatio: meta.width / meta.height, minHeight: 176, maxWidth: 116 }}
       >
         {src ? (
           <img
@@ -127,28 +121,36 @@ function PosterPicker({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <span className="label">Snímek z času</span>
-          <span className="font-mono text-text">
-            {formatDuration(state.poster.timeSeconds)}
-          </span>
+      <div className="flex flex-1 flex-col justify-center gap-6">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between">
+            <span className="label">Snímek z času</span>
+            <span className="font-mono text-text">
+              {formatDuration(state.poster.timeSeconds)}
+            </span>
+          </div>
+
+          <Slider
+            value={state.poster.timeSeconds}
+            min={0}
+            max={max}
+            step={0.1}
+            onChange={(seconds) => dispatch({ type: "setPosterTime", seconds })}
+            ariaLabel="Čas náhledového snímku"
+            minLabel="0:00"
+            maxLabel={formatDuration(meta.durationSeconds)}
+            compactLabels
+          />
         </div>
 
-        <Slider
-          value={state.poster.timeSeconds}
-          min={0}
-          max={max}
-          step={0.1}
-          onChange={(seconds) => dispatch({ type: "setPosterTime", seconds })}
-          ariaLabel="Čas náhledového snímku"
-          minLabel="0:00"
-          maxLabel={formatDuration(meta.durationSeconds)}
-        />
-
-        <p className="text-text-muted">
-          Vyber snímek, na kterém je člověk dobře vidět a dívá se do kamery.
-        </p>
+        <div className="flex flex-col">
+          <Segmented
+            value={state.poster.format}
+            options={POSTER_FORMATS}
+            onChange={(format) => dispatch({ type: "setPosterFormat", format })}
+            ariaLabel="Formát náhledového obrázku"
+          />
+        </div>
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import {
   formatNumber,
   savingsPercent,
 } from "../../lib/format";
+import { posterFormatLabel } from "../../lib/poster";
 import { qualityBand } from "../../lib/quality";
 import { estimateSizeForConfig, formatBytes, formatEstimate } from "../../lib/size";
 import { audioSummary, speedLabel } from "../../lib/speed";
@@ -98,9 +99,9 @@ export function SummaryStep({ state, meta, onEdit, onStart }: SummaryStepProps) 
           label="Poster"
           value={
             state.poster.enabled
-              ? `Ano, z času ${formatDuration(state.poster.timeSeconds)}${
-                  state.poster.alsoWebp ? " · včetně WebP" : ""
-                }`
+              ? `Ano, z času ${formatDuration(state.poster.timeSeconds)} · ${posterFormatLabel(
+                  state.poster.format,
+                )}`
               : "Ne"
           }
           onEdit={() => onEdit("output")}

@@ -29,8 +29,6 @@ export interface EncodeResult {
   originalSizeBytes: number;
   posterPath: string | null;
   posterSizeBytes: number | null;
-  webpPath: string | null;
-  webpSizeBytes: number | null;
 }
 
 /** Everything needed to run a job that is not already in `EncodeConfig`. */
@@ -91,10 +89,8 @@ interface CancelledEvent {
 }
 
 interface PosterResult {
-  jpegPath: string;
-  jpegSizeBytes: number;
-  webpPath: string | null;
-  webpSizeBytes: number | null;
+  path: string;
+  sizeBytes: number;
 }
 
 /** Shown when the invoke itself fails, i.e. before ffmpeg ever starts. */
@@ -178,8 +174,6 @@ export function useEncoder(): UseEncoder {
       originalSizeBytes: context?.originalSizeBytes ?? 0,
       posterPath: null,
       posterSizeBytes: null,
-      webpPath: null,
-      webpSizeBytes: null,
     };
 
     if (!context?.poster.enabled) {
@@ -195,16 +189,14 @@ export function useEncoder(): UseEncoder {
     invoke<PosterResult>("generate_poster", {
       videoPath: payload.outputPath,
       timeSeconds: context.poster.timeSeconds,
-      alsoWebp: context.poster.alsoWebp,
+      format: context.poster.format,
     })
       .then((poster) => {
         if (jobId.current !== job) return;
         finish({
           ...finished,
-          posterPath: poster.jpegPath,
-          posterSizeBytes: poster.jpegSizeBytes,
-          webpPath: poster.webpPath,
-          webpSizeBytes: poster.webpSizeBytes,
+          posterPath: poster.path,
+          posterSizeBytes: poster.sizeBytes,
         });
       })
       .catch((cause: unknown) => {

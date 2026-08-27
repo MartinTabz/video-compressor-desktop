@@ -76,13 +76,16 @@ export interface EncodeConfig {
   hasAudio: boolean;
 }
 
+/** The image format the poster is written in. One file, never two. */
+export type PosterFormat = "webp" | "jpg" | "png";
+
 /** The optional still image saved alongside the video. */
 export interface PosterConfig {
   enabled: boolean;
   /** Where in the video the frame is taken from. */
   timeSeconds: number;
-  /** A second copy in WebP, roughly half the size. */
-  alsoWebp: boolean;
+  /** WebP by default — smallest file, and every current browser reads it. */
+  format: PosterFormat;
 }
 
 /** The steps of the wizard, in order. */

@@ -136,15 +136,12 @@ struct CancelledPayload {
     job_id: String,
 }
 
-/// What a poster run produced. Both halves are optional at the type level
-/// because WebP is only made when asked for.
+/// What a poster run produced. Exactly one file — the format the user picked.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PosterResult {
-    pub jpeg_path: String,
-    pub jpeg_size_bytes: u64,
-    pub webp_path: Option<String>,
-    pub webp_size_bytes: Option<u64>,
+    pub path: String,
+    pub size_bytes: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -526,6 +523,17 @@ fn poster_path(video: &Path, extension: &str) -> PathBuf {
     video.with_file_name(format!("{stem}-poster.{extension}"))
 }
 
+/// The encoder flags for one poster format. WebP and PNG go through their own
+/// encoders; JPEG rides on the extension and `-q:v`.
+fn poster_codec(format: &str) -> Option<(&'static str, Vec<&'static str>)> {
+    match format {
+        "webp" => Some(("webp", vec!["-c:v", "libwebp", "-quality", "78"])),
+        "jpg" => Some(("jpg", vec!["-q:v", "2"])),
+        "png" => Some(("png", vec!["-c:v", "png"])),
+        _ => None,
+    }
+}
+
 /// Extracts the poster frame from the **encoded output**, not the source.
 ///
 /// Taking it from the finished file is what guarantees the image matches the
@@ -535,8 +543,15 @@ pub async fn generate_poster(
     app: AppHandle,
     video_path: String,
     time_seconds: f64,
-    also_webp: bool,
+    format: String,
 ) -> Result<PosterResult, String> {
+    // An unknown format is a frontend bug, not something the user can cause;
+    // fall back to WebP rather than losing the poster over it.
+    let (extension, codec) = poster_codec(&format).unwrap_or_else(|| {
+        eprintln!("[poster] unknown format {format:?}, falling back to webp");
+        poster_codec("webp").expect("webp is a known format")
+    });
+
     let video = PathBuf::from(&video_path);
     let time = if time_seconds.is_finite() && time_seconds > 0.0 {
         time_seconds
@@ -545,74 +560,28 @@ pub async fn generate_poster(
     };
     let time_string = format!("{time:.3}");
 
-    let jpeg = poster_path(&video, "jpg");
-    let jpeg_string = jpeg.to_string_lossy().into_owned();
+    let image = poster_path(&video, extension);
+    let image_string = image.to_string_lossy().into_owned();
 
-    run_sidecar(
-        &app,
-        FFMPEG,
-        &[
-            "-v", "error",
-            "-i", &video_path,
-            "-ss", &time_string,
-            "-frames:v", "1",
-            "-q:v", "2",
-            "-y",
-            &jpeg_string,
-        ],
-    )
-    .await
-    .map_err(poster_error)?;
+    let mut args = vec!["-v", "error", "-i", &video_path, "-ss", &time_string, "-frames:v", "1"];
+    args.extend(codec);
+    args.extend(["-y", image_string.as_str()]);
 
-    if !jpeg.exists() {
-        eprintln!("[poster] ffmpeg exited 0 but wrote nothing to {jpeg_string}");
+    run_sidecar(&app, FFMPEG, &args)
+        .await
+        .map_err(poster_error)?;
+
+    if !image.exists() {
+        eprintln!("[poster] ffmpeg exited 0 but wrote nothing to {image_string}");
         return Err(POSTER_FAILED.to_string());
     }
 
-    println!("[poster] wrote {jpeg_string}");
+    println!("[poster] wrote {image_string}");
 
-    let mut result = PosterResult {
-        jpeg_size_bytes: size_of(&jpeg),
-        jpeg_path: jpeg_string,
-        webp_path: None,
-        webp_size_bytes: None,
-    };
-
-    if !also_webp {
-        return Ok(result);
-    }
-
-    let webp = poster_path(&video, "webp");
-    let webp_string = webp.to_string_lossy().into_owned();
-
-    run_sidecar(
-        &app,
-        FFMPEG,
-        &[
-            "-v", "error",
-            "-i", &video_path,
-            "-ss", &time_string,
-            "-frames:v", "1",
-            "-c:v", "libwebp",
-            "-quality", "78",
-            "-y",
-            &webp_string,
-        ],
-    )
-    .await
-    .map_err(poster_error)?;
-
-    if !webp.exists() {
-        eprintln!("[poster] ffmpeg exited 0 but wrote no webp to {webp_string}");
-        return Err(POSTER_FAILED.to_string());
-    }
-
-    println!("[poster] wrote {webp_string}");
-
-    result.webp_size_bytes = Some(size_of(&webp));
-    result.webp_path = Some(webp_string);
-
-    Ok(result)
+    Ok(PosterResult {
+        size_bytes: size_of(&image),
+        path: image_string,
+    })
 }
 
 fn poster_error(error: SidecarError) -> String {
@@ -731,6 +700,14 @@ mod tests {
         assert_eq!(eta_of(5.0, 10.0, None), None);
         // Past the end: no negative countdown.
         assert_eq!(eta_of(12.0, 10.0, Some(2.0)), Some(0.0));
+    }
+
+    #[test]
+    fn poster_codec_covers_every_offered_format() {
+        for format in ["webp", "jpg", "png"] {
+            assert_eq!(poster_codec(format).map(|(ext, _)| ext), Some(format));
+        }
+        assert!(poster_codec("gif").is_none());
     }
 
     #[test]

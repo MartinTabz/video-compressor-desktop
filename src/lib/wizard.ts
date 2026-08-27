@@ -1,6 +1,7 @@
 import type {
   AudioMode,
   EncodeConfig,
+  PosterFormat,
   StepId,
   VideoMetadata,
   WizardState,
@@ -58,7 +59,7 @@ export const initialState: WizardState = {
   poster: {
     enabled: false,
     timeSeconds: DEFAULT_POSTER_SECONDS,
-    alsoWebp: false,
+    format: "webp",
   },
 };
 
@@ -77,7 +78,7 @@ export type WizardAction =
   | { type: "setOutputPath"; path: string }
   | { type: "setPosterEnabled"; enabled: boolean }
   | { type: "setPosterTime"; seconds: number }
-  | { type: "setPosterWebp"; enabled: boolean }
+  | { type: "setPosterFormat"; format: PosterFormat }
   | { type: "goToStep"; step: StepId }
   | { type: "next" }
   | { type: "back" }
@@ -183,15 +184,7 @@ export function wizardReducer(
       return { ...state, outputPath: action.path };
 
     case "setPosterEnabled":
-      return {
-        ...state,
-        poster: {
-          ...state.poster,
-          enabled: action.enabled,
-          // WebP is a sub-option; turning the poster off takes it along.
-          alsoWebp: action.enabled ? state.poster.alsoWebp : false,
-        },
-      };
+      return { ...state, poster: { ...state.poster, enabled: action.enabled } };
 
     case "setPosterTime": {
       const duration = state.metadata?.durationSeconds ?? 0;
@@ -206,8 +199,8 @@ export function wizardReducer(
       };
     }
 
-    case "setPosterWebp":
-      return { ...state, poster: { ...state.poster, alsoWebp: action.enabled } };
+    case "setPosterFormat":
+      return { ...state, poster: { ...state.poster, format: action.format } };
 
     case "goToStep":
       return withStep(state, action.step);

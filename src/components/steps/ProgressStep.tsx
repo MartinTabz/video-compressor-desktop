@@ -223,9 +223,6 @@ function ResultView({
             </div>
             <span className="font-mono text-label text-text-muted">
               {formatBytes(result.posterSizeBytes ?? 0)}
-              {result.webpSizeBytes !== null && (
-                <> · WebP {formatBytes(result.webpSizeBytes)}</>
-              )}
             </span>
           </div>
         )}

@@ -166,12 +166,12 @@ describe("poster", () => {
     expect(state.poster.timeSeconds).toBeLessThan(2);
   });
 
-  it("takes the WebP copy with it when the poster is turned off", () => {
+  it("keeps the chosen format when the poster is turned off and on again", () => {
     const on = wizardReducer(loaded(), { type: "setPosterEnabled", enabled: true });
-    const webp = wizardReducer(on, { type: "setPosterWebp", enabled: true });
-    const off = wizardReducer(webp, { type: "setPosterEnabled", enabled: false });
+    const png = wizardReducer(on, { type: "setPosterFormat", format: "png" });
+    const off = wizardReducer(png, { type: "setPosterEnabled", enabled: false });
 
-    expect(off.poster.alsoWebp).toBe(false);
+    expect(off.poster.format).toBe("png");
   });
 });
 
