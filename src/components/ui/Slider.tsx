@@ -27,6 +27,8 @@ interface SliderProps {
   /** Text under the two ends of the track. */
   minLabel?: string;
   maxLabel?: string;
+  /** Pull the end labels closer to the track. */
+  compactLabels?: boolean;
 }
 
 export function Slider({
@@ -39,6 +41,7 @@ export function Slider({
   band,
   minLabel,
   maxLabel,
+  compactLabels = false,
 }: SliderProps) {
   const id = useId();
   const span = Math.max(max - min, 0.0001);
@@ -48,7 +51,7 @@ export function Slider({
   const bandRight = band ? ((clamp(band.to, min, max) - min) / span) * 100 : 0;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={compactLabels ? "flex flex-col gap-0.5" : "flex flex-col gap-2"}>
       <div className="relative h-6">
         {/* Empty track */}
         <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-surface-2" />

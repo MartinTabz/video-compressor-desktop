@@ -26,8 +26,7 @@ export function FrameRateStep({ state, meta, dispatch }: FrameRateStepProps) {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <span className="label">Snímků za sekundu</span>
+        <div className="flex items-baseline justify-end">
           <span className="font-mono text-title text-accent">
             {formatFps(state.fps)}
           </span>
@@ -42,6 +41,7 @@ export function FrameRateStep({ state, meta, dispatch }: FrameRateStepProps) {
           ariaLabel="Snímků za sekundu"
           minLabel={String(MIN_FPS)}
           maxLabel={String(ceiling)}
+          compactLabels
         />
 
         <p className="text-text-muted">{frameRateDescription(state.fps)}</p>
@@ -75,10 +75,6 @@ export function FrameRateStep({ state, meta, dispatch }: FrameRateStepProps) {
           })}
         </div>
       </div>
-
-      <p className="text-text-muted">
-        Víc snímků, než má původní video, nemá smysl – proto je {formatFps(ceiling)} strop.
-      </p>
     </div>
   );
 }

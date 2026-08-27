@@ -29,7 +29,7 @@ export interface StepDefinition {
 export const STEPS: StepDefinition[] = [
   { id: "source", label: "Video", title: "Výběr videa" },
   { id: "resolution", label: "Rozlišení", title: "Rozlišení" },
-  { id: "framerate", label: "Plynulost", title: "Plynulost" },
+  { id: "framerate", label: "FPS", title: "Snímky za vteřinu" },
   { id: "quality", label: "Kvalita", title: "Kvalita" },
   { id: "speed", label: "Rychlost", title: "Rychlost zpracování" },
   { id: "audio", label: "Zvuk", title: "Zvuk" },
