@@ -32,26 +32,28 @@ export function QualityStep({ state, meta, dispatch }: QualityStepProps) {
   return (
     <div className="flex items-start gap-8">
       <div className="flex flex-1 flex-col gap-8">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-baseline justify-between">
-            <span className="label">Kvalita</span>
-            <span className="font-mono text-title text-accent">
-              {state.qualityPercent} %
-            </span>
+        <div className="flex flex-col gap-7">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-end">
+              <span className="font-mono text-title text-accent">
+                {state.qualityPercent} %
+              </span>
+            </div>
+
+            <Slider
+              value={state.qualityPercent}
+              min={0}
+              max={100}
+              onChange={(percent) => dispatch({ type: "setQuality", percent })}
+              ariaLabel="Kvalita v procentech"
+              band={{ from: RECOMMENDED_RANGE.min, to: RECOMMENDED_RANGE.max }}
+              minLabel="0 %"
+              maxLabel="100 %"
+              compactLabels
+            />
           </div>
 
-          <Slider
-            value={state.qualityPercent}
-            min={0}
-            max={100}
-            onChange={(percent) => dispatch({ type: "setQuality", percent })}
-            ariaLabel="Kvalita v procentech"
-            band={{ from: RECOMMENDED_RANGE.min, to: RECOMMENDED_RANGE.max }}
-            minLabel="0 %"
-            maxLabel="100 %"
-          />
-
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             <p className={band.recommended ? "text-accent" : "text-text"}>
               {band.label}
             </p>
@@ -62,8 +64,8 @@ export function QualityStep({ state, meta, dispatch }: QualityStepProps) {
         <div className="flex flex-col gap-1 rounded-card border border-border bg-surface p-4">
           <p className="label">Odhad velikosti</p>
           <p className="font-mono text-title text-text">{formatEstimate(estimate)}</p>
-          <p className="text-text-muted">
-            Jde o odhad – skutečná velikost závisí na tom, kolik se ve videu hýbe.
+          <p className="text-label text-text-muted">
+            Pouze odhad, výsledek záleží na pohybu ve videu
           </p>
         </div>
       </div>

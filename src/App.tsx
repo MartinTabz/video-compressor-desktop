@@ -50,6 +50,7 @@ export default function App() {
   const running = state.step === "progress";
 
   const definition = STEPS[stepIndex(state.step)];
+  const hasHint = !running && STEP_HINTS[state.step] !== undefined;
 
   const pickFile = useCallback(
     async (path: string) => {
@@ -131,7 +132,9 @@ export default function App() {
           // Re-keying on the step is what makes the transition play: React
           // remounts the panel, and the animation runs from its first frame.
           key={state.step}
-          className="animate-step flex flex-col gap-8"
+          // Without a hint sentence the title sits alone, so the panel below it
+          // moves up to keep the header and its content reading as one block.
+          className={`animate-step flex flex-col ${hasHint ? "gap-8" : "gap-5"}`}
         >
           <header className="flex flex-col gap-1">
             <h1 className="step-title">
@@ -256,18 +259,17 @@ export default function App() {
   }
 }
 
-/** One quiet sentence under each step title. */
-function StepHint({ step }: { step: StepId }) {
-  const hints: Partial<Record<StepId, string>> = {
-    source: "Přetáhni video do okna, nebo ho vyber v počítači.",
-    quality: "Čím níž, tím menší soubor. Rozdíl bývá menší, než čekáš.",
-    speed: "Jak dlouho si aplikace může hrát s hledáním úspor.",
-    audio: "Co se má stát se zvukovou stopou.",
-    output: "Kam soubor uložit a jestli k němu chceš i náhledový obrázek.",
-    summary: "Zkontroluj nastavení a spusť kompresi.",
-  };
+/** One quiet sentence under each step title. Not every step needs one. */
+const STEP_HINTS: Partial<Record<StepId, string>> = {
+  source: "Přetáhni video do okna, nebo ho vyber v počítači.",
+  speed: "Jak dlouho si aplikace může hrát s hledáním úspor.",
+  audio: "Co se má stát se zvukovou stopou.",
+  output: "Kam soubor uložit a jestli k němu chceš i náhledový obrázek.",
+  summary: "Zkontroluj nastavení a spusť kompresi.",
+};
 
-  const hint = hints[step];
+function StepHint({ step }: { step: StepId }) {
+  const hint = STEP_HINTS[step];
   return hint ? <p className="text-text-muted">{hint}</p> : null;
 }
 
