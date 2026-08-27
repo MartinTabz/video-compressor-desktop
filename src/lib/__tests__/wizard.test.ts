@@ -187,4 +187,37 @@ describe("navigation", () => {
 
     expect(back.furthestStep).toBe("quality");
   });
+
+  it("marks a step reached with „upravit“ as an edit round trip", () => {
+    const summary = wizardReducer(loaded(), { type: "goToStep", step: "summary" });
+    const editing = wizardReducer(summary, {
+      type: "editFromSummary",
+      step: "resolution",
+    });
+
+    expect(editing.step).toBe("resolution");
+    expect(editing.editingFromSummary).toBe(true);
+    expect(editing.furthestStep).toBe("summary");
+  });
+
+  it("closes the round trip on the way back to the summary", () => {
+    const editing = wizardReducer(loaded(), {
+      type: "editFromSummary",
+      step: "resolution",
+    });
+
+    expect(
+      wizardReducer(editing, { type: "goToStep", step: "summary" }).editingFromSummary,
+    ).toBe(false);
+  });
+
+  it("leaves edit mode as soon as the user navigates anywhere else", () => {
+    const editing = wizardReducer(loaded(), {
+      type: "editFromSummary",
+      step: "resolution",
+    });
+
+    expect(wizardReducer(editing, { type: "next" }).editingFromSummary).toBe(false);
+    expect(wizardReducer(editing, { type: "back" }).editingFromSummary).toBe(false);
+  });
 });

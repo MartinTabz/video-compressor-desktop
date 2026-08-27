@@ -110,6 +110,11 @@ export interface WizardState {
   step: StepId;
   /** How far the user has got — earlier steps stay clickable in the stepper. */
   furthestStep: StepId;
+  /**
+   * True while the user is on a step they reached with „upravit" from the
+   * summary. The forward button then leads straight back there.
+   */
+  editingFromSummary: boolean;
   metadata: VideoMetadata | null;
   width: number;
   height: number;

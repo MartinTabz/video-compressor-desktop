@@ -88,6 +88,20 @@
   .animate-step {
     animation: step-in 200ms ease-out;
   }
+  /*
+   * The final action on the summary breathes: a slow lift of the amber, so the
+   * one button that starts real work is unmistakable without a glow or a scale.
+   */
+  .animate-cta {
+    animation: cta-pulse 1400ms ease-in-out infinite;
+  }
+  /*
+   * The result screen's checkmark. It waits half a second — long enough for the
+   * eye to land on the numbers first — then draws itself in.
+   */
+  .animate-check {
+    animation: check-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) 500ms both;
+  }
   /* The one focus treatment used on every interactive element. */
   .focus-ring {
     @apply outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
@@ -120,6 +134,44 @@
 
   .animate-spin {
     animation-duration: 1.6s;
+  }
+
+  .animate-cta {
+    animation: none;
+  }
+
+  .animate-check {
+    animation-name: check-fade;
+  }
+}
+
+@keyframes cta-pulse {
+  0%,
+  100% {
+    background-color: var(--accent);
+  }
+  50% {
+    background-color: var(--accent-lift);
+  }
+}
+
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes check-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

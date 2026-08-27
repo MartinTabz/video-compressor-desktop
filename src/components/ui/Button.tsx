@@ -6,6 +6,13 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
  */
 
 type Variant = "primary" | "secondary" | "ghost";
+type Size = "md" | "lg";
+
+/** „lg" exists for one button: the final action on the summary. */
+const SIZE: Record<Size, string> = {
+  md: "px-5 py-3",
+  lg: "px-6 py-5 text-subtitle",
+};
 
 const VARIANT: Record<Variant, string> = {
   primary:
@@ -17,6 +24,7 @@ const VARIANT: Record<Variant, string> = {
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  size?: Size;
   /** Fills the width of its container — used for the big final action. */
   block?: boolean;
   children: ReactNode;
@@ -24,6 +32,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({
   variant = "secondary",
+  size = "md",
   block = false,
   className = "",
   type = "button",
@@ -34,8 +43,9 @@ export function Button({
     <button
       type={type}
       className={[
-        "focus-ring inline-flex items-center justify-center gap-2 rounded-card px-5 py-3",
+        "focus-ring inline-flex items-center justify-center gap-2 rounded-card",
         "transition-colors duration-hover disabled:cursor-not-allowed",
+        SIZE[size],
         VARIANT[variant],
         block ? "w-full" : "",
         className,

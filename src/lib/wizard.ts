@@ -44,6 +44,7 @@ const DEFAULT_POSTER_SECONDS = 1;
 export const initialState: WizardState = {
   step: "source",
   furthestStep: "source",
+  editingFromSummary: false,
   metadata: null,
   width: 0,
   height: 0,
@@ -80,6 +81,7 @@ export type WizardAction =
   | { type: "setPosterTime"; seconds: number }
   | { type: "setPosterFormat"; format: PosterFormat }
   | { type: "goToStep"; step: StepId }
+  | { type: "editFromSummary"; step: StepId }
   | { type: "next" }
   | { type: "back" }
   | { type: "reset" };
@@ -205,6 +207,11 @@ export function wizardReducer(
     case "goToStep":
       return withStep(state, action.step);
 
+    case "editFromSummary":
+      // The one way into edit mode: `withStep` clears the flag, so it has to be
+      // set again afterwards.
+      return { ...withStep(state, action.step), editingFromSummary: true };
+
     case "next": {
       const target = adjacentStep(state, state.step, 1);
       return target ? withStep(state, target) : state;
@@ -217,11 +224,16 @@ export function wizardReducer(
   }
 }
 
-/** Moves to a step and remembers the high-water mark for the stepper. */
+/**
+ * Moves to a step and remembers the high-water mark for the stepper.
+ *
+ * Any ordinary move — „Pokračovat", „Zpět", a click in the stepper — means the
+ * user left the round trip that „upravit" started, so edit mode ends here.
+ */
 function withStep(state: WizardState, step: StepId): WizardState {
   const furthest =
     stepIndex(step) > stepIndex(state.furthestStep) ? step : state.furthestStep;
-  return { ...state, step, furthestStep: furthest };
+  return { ...state, step, furthestStep: furthest, editingFromSummary: false };
 }
 
 /** Position in `STEPS`; the progress screen sorts after everything. */

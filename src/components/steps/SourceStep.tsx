@@ -180,7 +180,7 @@ function VideoInfoCard({
             value={formatDimensions(meta.width, meta.height)}
             badge={orientationLabel}
           />
-          <Fact label="Plynulost" value={formatFps(meta.fps)} />
+          <Fact label="FPS" value={formatFps(meta.fps)} />
           <Fact
             label="Zvuk"
             value={meta.hasAudio ? "Obsahuje zvuk" : "Bez zvuku"}

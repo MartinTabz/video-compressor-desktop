@@ -68,7 +68,7 @@ export function SummaryStep({ state, meta, onEdit, onStart }: SummaryStepProps) 
           onEdit={() => onEdit("resolution")}
         />
         <Row
-          label="Plynulost"
+          label="FPS"
           value={`${formatNumber(state.fps)} snímků za sekundu`}
           onEdit={() => onEdit("framerate")}
         />
@@ -108,22 +108,34 @@ export function SummaryStep({ state, meta, onEdit, onStart }: SummaryStepProps) 
         />
       </dl>
 
-      <div className="flex items-baseline justify-between rounded-card border border-border bg-surface p-4">
+      <div className="flex items-center justify-between rounded-card border border-border bg-surface p-4">
         <span className="label">Odhadovaná velikost</span>
-        <span className="figure text-accent">
-          {formatEstimate(estimate)}
-          <span className="ml-3 font-sans text-body font-normal tracking-normal text-text-muted">
-            (úspora {savings} %)
-          </span>
+        {/* Both halves are their own box, so the small text centres against
+            the figure instead of sitting on its baseline. */}
+        <span className="flex items-center gap-3">
+          <span className="figure leading-none text-accent">{formatEstimate(estimate)}</span>
+          <span className="text-body text-text-muted">(úspora {savings} %)</span>
         </span>
       </div>
 
-      {config && <TechnicalDetails command={toCommandString(buildArgs(config))} />}
-
-      <Button variant="primary" block onClick={onStart}>
-        <Zap className="h-4 w-4" aria-hidden="true" />
+      <Button
+        variant="primary"
+        size="lg"
+        block
+        className="animate-cta font-semibold"
+        onClick={onStart}
+      >
+        <Zap className="h-5 w-5" aria-hidden="true" />
         Zkomprimovat video
       </Button>
+
+      {/* Below the action and quieter than it: the one person who wants to
+          read the command should have to look for it. */}
+      {config && (
+        <div className="mt-2">
+          <TechnicalDetails command={toCommandString(buildArgs(config))} />
+        </div>
+      )}
     </div>
   );
 }
@@ -183,32 +195,38 @@ function TechnicalDetails({ command }: { command: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4">
+    <div className="flex flex-col gap-3">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="focus-ring flex items-center gap-2 self-start rounded-input text-text-muted transition-colors duration-hover hover:text-text"
+        className="focus-ring flex items-center gap-2 self-start rounded-input text-label text-text-muted transition-colors duration-hover hover:text-text"
       >
         <ChevronDown
-          className={`h-4 w-4 transition-transform duration-hover ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 transition-transform duration-hover ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         />
         Zobrazit technické detaily
       </button>
 
       {open && (
-        <div className="flex animate-step flex-col gap-3">
-          <pre className="overflow-x-auto rounded-input border border-border bg-surface-2 p-4 font-mono text-label leading-5 text-text">
+        <div className="relative animate-step">
+          <pre className="overflow-x-auto rounded-input border border-border bg-surface-2 p-4 pr-16 font-mono text-label leading-5 text-text">
             {command}
           </pre>
-          <Button onClick={copy} className="self-start">
+          {/* Icon only, sitting on the block it copies — a labelled button
+              under it would read as a second action on the step. */}
+          <Button
+            onClick={copy}
+            className="absolute right-2 top-2 px-3 py-3"
+            aria-label={copied ? "Zkopírováno" : "Kopírovat příkaz"}
+            title={copied ? "Zkopírováno" : "Kopírovat příkaz"}
+          >
             {copied ? (
               <Check className="h-4 w-4 text-success" aria-hidden="true" />
             ) : (
               <Copy className="h-4 w-4" aria-hidden="true" />
             )}
-            {copied ? "Zkopírováno" : "Kopírovat"}
           </Button>
         </div>
       )}

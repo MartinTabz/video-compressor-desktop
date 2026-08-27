@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, CheckCircle2, FolderOpen, RotateCcw, XCircle } from "lucide-react";
+import { AlertTriangle, Check, FolderOpen, RotateCcw, XCircle } from "lucide-react";
 
 import type { WizardState } from "../../types";
 import type { UseEncoder } from "../../hooks/useEncoder";
@@ -170,46 +170,59 @@ function ResultView({
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center gap-3">
-        <CheckCircle2 className="h-6 w-6 shrink-0 text-success" aria-hidden="true" />
+    <div className="flex flex-col items-center gap-8 text-center">
+      {/* Bare stroke, no disc around it: the tick is the only mark on the
+          screen, and it arrives a beat after the numbers it confirms. */}
+      <Check
+        className="animate-check h-12 w-12 text-success"
+        strokeWidth={2.5}
+        aria-hidden="true"
+      />
+
+      <div className="flex flex-col items-center gap-2">
         <p className="figure">
           {formatBytes(result.originalSizeBytes)} →{" "}
           <span className="text-success">{formatBytes(result.outputSizeBytes)}</span>
-          <span className="ml-3 font-sans text-body font-normal tracking-normal text-text-muted">
-            (úspora {savings} %)
-          </span>
         </p>
+        <p className="text-text-muted">úspora {savings} %</p>
       </div>
 
       {warning && (
-        <p className="flex items-center gap-2 text-text-muted">
+        <p className="flex items-center justify-center gap-2 text-text-muted">
           <AlertTriangle className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
           {warning}
         </p>
       )}
 
-      <div className="flex items-start justify-center gap-6">
+      {/*
+       * Three columns: the video sits in the middle one, so it is centred on
+       * the screen itself rather than on the pair, and the poster hangs off its
+       * right. Both are vertically centred against each other.
+       */}
+      <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-6">
+        <div aria-hidden="true" />
         {/* Height-constrained so a 9:16 result stays on screen whole. */}
-        {videoFailed ? (
-          <div
-            className="flex items-center justify-center rounded-card border border-border bg-surface-2 px-6 text-center text-text-muted"
-            style={{ height: 320, maxWidth: "100%" }}
-          >
-            Náhled se nepodařilo přehrát. Soubor je uložený.
-          </div>
-        ) : (
-          <video
-            src={convertFileSrc(result.outputPath)}
-            controls
-            className="rounded-card border border-border bg-surface-2"
-            style={{ maxHeight: 320, maxWidth: "100%" }}
-            onError={() => setVideoFailed(true)}
-          />
-        )}
+        <div className="min-w-0">
+          {videoFailed ? (
+            <div
+              className="flex items-center justify-center rounded-card border border-border bg-surface-2 px-6 text-center text-text-muted"
+              style={{ height: 320, maxWidth: "100%" }}
+            >
+              Náhled se nepodařilo přehrát. Soubor je uložený.
+            </div>
+          ) : (
+            <video
+              src={convertFileSrc(result.outputPath)}
+              controls
+              className="rounded-card border border-border bg-surface-2"
+              style={{ maxHeight: 320, maxWidth: "100%" }}
+              onError={() => setVideoFailed(true)}
+            />
+          )}
+        </div>
 
         {result.posterPath && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col items-center gap-2 justify-self-start">
             <span className="label">Poster</span>
             <div
               className="flex items-center justify-center overflow-hidden rounded-input border border-border bg-surface-2"
@@ -228,7 +241,7 @@ function ResultView({
         )}
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex justify-center gap-3">
         <Button onClick={reveal}>
           <FolderOpen className="h-4 w-4" aria-hidden="true" />
           Zobrazit ve Finderu

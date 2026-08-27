@@ -49,6 +49,10 @@ export default function App() {
   const onLastStep = state.step === "summary";
   const onFirstStep = stepIndex(state.step) === 0;
   const running = state.step === "progress";
+  // Arrived here from „upravit" on the summary: the forward button leads back
+  // there and „Zpět" steps aside, so there is one way out and it is obvious.
+  const editing = state.editingFromSummary && !running;
+  const showBack = !running && !onFirstStep && !editing;
 
   const definition = STEPS[stepIndex(state.step)];
   const hasHint = !running && STEP_HINTS[state.step] !== undefined;
@@ -121,11 +125,20 @@ export default function App() {
 
     event.preventDefault();
     if (onLastStep) void startEncode();
+    else if (editing) dispatch({ type: "goToStep", step: "summary" });
     else dispatch({ type: "next" });
   }
 
   return (
-    <main className="min-h-screen bg-bg px-6 py-10" onKeyDown={handleKeyDown}>
+    <main
+      className={[
+        "min-h-screen bg-bg px-6 py-10",
+        // The encode and its result have no stepper and no title, so the panel
+        // is the whole screen: put it in the middle of the window.
+        running ? "flex flex-col justify-center" : "",
+      ].join(" ")}
+      onKeyDown={handleKeyDown}
+    >
       <div className="mx-auto flex max-w-content flex-col gap-10">
         {!running && <Stepper state={state} onJump={(step) => dispatch({ type: "goToStep", step })} />}
 
@@ -137,33 +150,45 @@ export default function App() {
           // moves up to keep the header and its content reading as one block.
           className={`animate-step flex flex-col ${hasHint ? "gap-8" : "gap-5"}`}
         >
-          <header className="flex flex-col gap-1">
-            <h1 className="step-title">
-              {running ? "Průběh" : (definition?.title ?? "")}
-            </h1>
-            {!running && <StepHint step={state.step} />}
-          </header>
+          {/* No heading while ffmpeg runs: the shape proxy says what is
+              happening, and a title above it would only crowd it. */}
+          {!running && (
+            <header className="flex flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-4">
+                <h1 className="step-title">{definition?.title ?? ""}</h1>
+
+                {showBack && (
+                  <Button
+                    variant="ghost"
+                    className="-mr-3 shrink-0 px-3 py-1.5"
+                    onClick={() => dispatch({ type: "back" })}
+                  >
+                    <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                    Zpět
+                  </Button>
+                )}
+              </div>
+              <StepHint step={state.step} />
+            </header>
+          )}
 
           {renderStep()}
         </section>
 
-        {!running && (
-          <footer
-            className={[
-              "flex items-center gap-4",
-              // Nothing to go back to on the first step, so the button is not
-              // there at all and „Pokračovat" keeps its right edge.
-              onFirstStep ? "justify-end" : "justify-between",
-            ].join(" ")}
-          >
-            {!onFirstStep && (
-              <Button variant="ghost" onClick={() => dispatch({ type: "back" })}>
+        {/* „Zpět" lives up in the header; the footer carries the one forward
+            action. The summary has its own, so it has no footer at all. */}
+        {!running && !onLastStep && (
+          <footer className="flex justify-end">
+            {editing ? (
+              <Button
+                variant="primary"
+                onClick={() => dispatch({ type: "goToStep", step: "summary" })}
+                disabled={!valid}
+              >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-                Zpět
+                Zpět na souhrn
               </Button>
-            )}
-
-            {!onLastStep && (
+            ) : (
               <Button
                 variant="primary"
                 onClick={() => dispatch({ type: "next" })}
@@ -239,7 +264,7 @@ export default function App() {
           <SummaryStep
             state={state}
             meta={meta}
-            onEdit={(step) => dispatch({ type: "goToStep", step })}
+            onEdit={(step) => dispatch({ type: "editFromSummary", step })}
             onStart={startEncode}
           />
         ) : null;
