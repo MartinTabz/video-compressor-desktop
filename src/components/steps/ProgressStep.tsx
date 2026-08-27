@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { CheckCircle2, FolderOpen, RotateCcw, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FolderOpen, RotateCcw, XCircle } from "lucide-react";
 
-import type { VideoMetadata, WizardState } from "../../types";
+import type { WizardState } from "../../types";
 import type { UseEncoder } from "../../hooks/useEncoder";
 import { Button } from "../ui/Button";
 import { ShapeProxy } from "../ui/ShapeProxy";
 import { formatRemaining, formatSpeed, savingsPercent } from "../../lib/format";
 import { formatBytes } from "../../lib/size";
-import { useFrame } from "../../hooks/useFrame";
 
 /**
  * The encode itself.
@@ -18,7 +17,6 @@ import { useFrame } from "../../hooks/useFrame";
  */
 interface ProgressStepProps {
   state: WizardState;
-  meta: VideoMetadata;
   encoder: UseEncoder;
   onBackToSummary: () => void;
   onStartOver: () => void;
@@ -26,7 +24,6 @@ interface ProgressStepProps {
 
 export function ProgressStep({
   state,
-  meta,
   encoder,
   onBackToSummary,
   onStartOver,
@@ -35,8 +32,8 @@ export function ProgressStep({
     return (
       <ResultView
         state={state}
-        meta={meta}
         result={encoder.result}
+        warning={encoder.warning}
         onStartOver={onStartOver}
       />
     );
@@ -69,10 +66,30 @@ export function ProgressStep({
         <p role="alert" className="text-danger">
           {encoder.error ?? "Kompresi se nepodařilo dokončit."}
         </p>
+        {/* The only place the log is ever offered. A finished run has no use
+            for it, and a working app should not advertise its own plumbing. */}
+        <button type="button" className="link" onClick={openLog}>
+          Otevřít log
+        </button>
         <Button onClick={onBackToSummary}>Zpět na souhrn</Button>
       </div>
     );
   }
+
+  return <RunningView state={state} encoder={encoder} />;
+}
+
+/**
+ * The run in progress. Split out so „Zrušit" can remember it has been pressed
+ * without that flag surviving into the next encode.
+ */
+function RunningView({ state, encoder }: { state: WizardState; encoder: UseEncoder }) {
+  // Killing ffmpeg and deleting the partial file takes a moment, and the
+  // percentage keeps climbing until it lands. A button that stays live would
+  // invite a second click at exactly the wrong time.
+  const [cancelling, setCancelling] = useState(false);
+
+  const poster = encoder.phase === "poster";
 
   return (
     <div className="flex flex-col items-center gap-8 py-6">
@@ -86,40 +103,63 @@ export function ProgressStep({
         maxWidth={240}
       />
 
-      <div className="flex items-center gap-6 font-mono text-text-muted">
-        <span>{encoder.speed !== null ? formatSpeed(encoder.speed) : "—"}</span>
-        <span aria-hidden="true">·</span>
-        <span>{formatRemaining(encoder.remainingSeconds)}</span>
+      {/* Fixed height on both lines: the readout must not push the shape
+          around as the numbers arrive and disappear. */}
+      <div className="flex h-6 items-center gap-6 font-mono text-text-muted">
+        {poster ? (
+          <span className="font-sans">Vytvářím náhledový obrázek…</span>
+        ) : (
+          <>
+            <span>{encoder.speed !== null ? formatSpeed(encoder.speed) : "—"}</span>
+            <span aria-hidden="true">·</span>
+            <span>{formatRemaining(encoder.remainingSeconds)}</span>
+          </>
+        )}
       </div>
 
-      <Button onClick={encoder.cancel}>Zrušit</Button>
+      <div className="h-10">
+        {/* Cancelling has nothing left to stop once the video is written, and
+            the poster call is a second or two at most. */}
+        {!poster && (
+          <Button
+            onClick={() => {
+              setCancelling(true);
+              encoder.cancel();
+            }}
+            disabled={cancelling}
+          >
+            {cancelling ? "Ruším…" : "Zrušit"}
+          </Button>
+        )}
+      </div>
     </div>
   );
+}
+
+async function openLog() {
+  try {
+    await invoke("open_log");
+  } catch (cause) {
+    console.error("open_log failed:", cause);
+  }
 }
 
 /** What the user came for: the two numbers and the file itself. */
 function ResultView({
   state,
-  meta,
   result,
+  warning,
   onStartOver,
 }: {
   state: WizardState;
-  meta: VideoMetadata;
   result: NonNullable<UseEncoder["result"]>;
+  warning: string | null;
   onStartOver: () => void;
 }) {
   const savings = savingsPercent(result.originalSizeBytes, result.outputSizeBytes);
 
-  // The finished file is what should play here. Until it exists — the phase 3
-  // encoder only pretends — fall back to the source, which has the same frames.
-  const [videoSrc, setVideoSrc] = useState(() => convertFileSrc(result.outputPath));
-
-  const poster = useFrame(
-    state.poster.enabled ? meta : null,
-    state.poster.timeSeconds,
-    0,
-  );
+  // The finished file, played straight from disk through the asset protocol.
+  const [videoFailed, setVideoFailed] = useState(false);
 
   async function reveal() {
     try {
@@ -140,29 +180,44 @@ function ResultView({
         </p>
       </div>
 
+      {warning && (
+        <p className="flex items-center gap-2 text-text-muted">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+          {warning}
+        </p>
+      )}
+
       <div className="flex items-start justify-center gap-6">
         {/* Height-constrained so a 9:16 result stays on screen whole. */}
-        <video
-          src={videoSrc}
-          controls
-          className="rounded-card border border-border bg-surface-2"
-          style={{ maxHeight: 320, maxWidth: "100%" }}
-          onError={() => {
-            const source = convertFileSrc(meta.path);
-            if (videoSrc !== source) setVideoSrc(source);
-          }}
-        />
+        {videoFailed ? (
+          <div
+            className="flex items-center justify-center rounded-card border border-border bg-surface-2 px-6 text-center text-text-muted"
+            style={{ height: 320, maxWidth: "100%" }}
+          >
+            Náhled se nepodařilo přehrát. Soubor je uložený.
+          </div>
+        ) : (
+          <video
+            src={convertFileSrc(result.outputPath)}
+            controls
+            className="rounded-card border border-border bg-surface-2"
+            style={{ maxHeight: 320, maxWidth: "100%" }}
+            onError={() => setVideoFailed(true)}
+          />
+        )}
 
         {result.posterPath && (
           <div className="flex flex-col gap-2">
             <span className="label">Poster</span>
             <div
               className="flex items-center justify-center overflow-hidden rounded-input border border-border bg-surface-2"
-              style={{ width: 120, height: 180 }}
+              style={{ width: 120, height: 120 * (state.height / state.width) }}
             >
-              {poster.src && (
-                <img src={poster.src} alt="Náhledový obrázek" className="h-full w-full object-contain" />
-              )}
+              <img
+                src={convertFileSrc(result.posterPath)}
+                alt="Náhledový obrázek"
+                className="h-full w-full object-contain"
+              />
             </div>
             <span className="font-mono text-label text-text-muted">
               {formatBytes(result.posterSizeBytes ?? 0)}

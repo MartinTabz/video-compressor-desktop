@@ -30,6 +30,16 @@
   .step-title {
     @apply font-sans text-title font-semibold tracking-title text-text;
   }
+
+  /*
+   * A quiet textual affordance for the one thing that is not a decision:
+   * opening the log after a failure. Deliberately not a Button — it must not
+   * compete with „Zpět na souhrn".
+   */
+  .link {
+    @apply rounded-input text-text-muted underline underline-offset-4 transition-colors duration-hover hover:text-text;
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+  }
 }
 
 @layer components {

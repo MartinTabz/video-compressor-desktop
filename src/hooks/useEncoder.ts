@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { EncodeConfig, PosterConfig, SpeedPreset } from "../types";
+import { buildArgs } from "../lib/ffmpegArgs";
+import type { EncodeConfig, PosterConfig } from "../types";
 
 /**
  * The encoder, as the UI sees it.
  *
- * Phase 3 fills this in with a simulation so the whole screen can be built and
- * judged; phase 4 replaces the body of `start` with a real sidecar spawn and
- * `-progress pipe:1` parsing. **Nothing outside this file may know which one is
- * running** — that is the entire point of the seam.
+ * Rust does the spawning and the progress parsing; this hook is the seam that
+ * turns four Tauri events into the five fields the progress screen reads.
+ * **Nothing outside this file knows there is a sidecar** — that is the point.
  */
 
 export type EncoderStatus = "idle" | "running" | "done" | "cancelled" | "error";
+
+/**
+ * Which half of the run is on screen. The poster is a second, much shorter
+ * ffmpeg call after the video is already finished, and saying so is what keeps
+ * a slow poster from reading as a hang at 100 %.
+ */
+export type EncodePhase = "video" | "poster";
 
 /** What a finished job leaves behind. */
 export interface EncodeResult {
@@ -26,12 +35,10 @@ export interface EncodeResult {
 
 /** Everything needed to run a job that is not already in `EncodeConfig`. */
 export interface EncodeContext {
-  /** Source length — the mock paces itself against it. */
+  /** Source length — every percentage and ETA is measured against it. */
   durationSeconds: number;
   /** Source size, for the „48,2 MB → 3,2 MB" comparison. */
   originalSizeBytes: number;
-  /** What `estimateSizeForConfig` predicted. The mock delivers roughly that. */
-  estimatedSizeBytes: number;
   poster: PosterConfig;
 }
 
@@ -39,6 +46,8 @@ export interface UseEncoder {
   status: EncoderStatus;
   /** 0–100. */
   progress: number;
+  /** Which ffmpeg call is running. Only meaningful while `status` is running. */
+  phase: EncodePhase;
   /** Encoded video seconds per real second, e.g. `2.4`. Null until known. */
   speed: number | null;
   /** Seconds of wall clock left, or null while it is still guesswork. */
@@ -46,152 +55,267 @@ export interface UseEncoder {
   result: EncodeResult | null;
   /** A finished Czech sentence, never ffmpeg output. */
   error: string | null;
+  /**
+   * Something went wrong that did not cost the user the video — today that
+   * means only a failed poster. Shown next to the result, not instead of it.
+   */
+  warning: string | null;
   start: (config: EncodeConfig, context: EncodeContext) => void;
   cancel: () => void;
   reset: () => void;
 }
 
-/** Roughly how many video seconds each preset chews through per real second. */
-const MOCK_THROUGHPUT: Record<SpeedPreset, number> = {
-  veryfast: 12,
-  medium: 5,
-  slow: 2.4,
-  veryslow: 0.9,
-};
+// --- The event payloads, exactly as `encode.rs` serializes them.
 
-/** The simulation stays inside these bounds however long the clip is. */
-const MOCK_MIN_SECONDS = 3;
-const MOCK_MAX_SECONDS = 20;
+interface ProgressEvent {
+  jobId: string;
+  percent: number;
+  speed: number | null;
+  etaSeconds: number | null;
+}
 
-/** How often progress is repainted. Matches what ffmpeg emits in practice. */
-const TICK_MS = 100;
+interface CompleteEvent {
+  jobId: string;
+  exitCode: number;
+  outputPath: string;
+  outputSizeBytes: number;
+}
 
-/** A JPEG poster runs about this many bytes per pixel at quality 3. */
-const POSTER_BYTES_PER_PIXEL = 0.14;
-/** WebP is advertised as „o polovinu menší" and behaves like it. */
-const WEBP_RATIO = 0.5;
+interface ErrorEvent {
+  jobId: string;
+  message: string;
+}
+
+interface CancelledEvent {
+  jobId: string;
+}
+
+interface PosterResult {
+  jpegPath: string;
+  jpegSizeBytes: number;
+  webpPath: string | null;
+  webpSizeBytes: number | null;
+}
+
+/** Shown when the invoke itself fails, i.e. before ffmpeg ever starts. */
+const START_FAILED = "Kompresi se nepodařilo spustit.";
 
 export function useEncoder(): UseEncoder {
   const [status, setStatus] = useState<EncoderStatus>("idle");
   const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState<EncodePhase>("video");
   const [speed, setSpeed] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [result, setResult] = useState<EncodeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * The job the UI is currently watching. Every handler compares against this
+   * first: a cancelled job's last few events are still in flight when the next
+   * run starts, and without the check they would drive the new progress bar.
+   */
+  const jobId = useRef<string | null>(null);
 
-  const stopTimer = useCallback(() => {
-    if (timer.current !== null) {
-      clearInterval(timer.current);
-      timer.current = null;
+  /** What the running job was asked to do — the completion handler needs it. */
+  const pending = useRef<EncodeContext | null>(null);
+
+  // One subscription for the lifetime of the hook. Re-subscribing per run is
+  // what produces duplicate progress updates on a second encode.
+  useEffect(() => {
+    let cancelled = false;
+    const unlisteners: UnlistenFn[] = [];
+
+    async function subscribe() {
+      const handlers: [string, (payload: never) => void][] = [
+        ["encode-progress", onProgress as (payload: never) => void],
+        ["encode-complete", onComplete as (payload: never) => void],
+        ["encode-error", onError as (payload: never) => void],
+        ["encode-cancelled", onCancelled as (payload: never) => void],
+      ];
+
+      for (const [name, handler] of handlers) {
+        const unlisten = await listen(name, (event) => handler(event.payload as never));
+        // The hook can unmount while these awaits are still resolving.
+        if (cancelled) unlisten();
+        else unlisteners.push(unlisten);
+      }
     }
+
+    void subscribe();
+
+    return () => {
+      cancelled = true;
+      for (const unlisten of unlisteners) unlisten();
+    };
+    // The handlers below only touch refs and setState, both of which are
+    // stable, so this subscribes exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A wizard reset or a closed window must not leave an interval running.
-  useEffect(() => stopTimer, [stopTimer]);
+  function isCurrent(payload: { jobId: string }): boolean {
+    return payload.jobId === jobId.current;
+  }
 
-  const start = useCallback(
-    (config: EncodeConfig, context: EncodeContext) => {
-      stopTimer();
-      setStatus("running");
-      setProgress(0);
-      setSpeed(null);
-      setRemainingSeconds(null);
-      setResult(null);
-      setError(null);
+  function onProgress(payload: ProgressEvent) {
+    if (!isCurrent(payload)) return;
+    setProgress(payload.percent);
+    setSpeed(payload.speed);
+    setRemainingSeconds(payload.etaSeconds);
+  }
 
-      const duration = Math.max(context.durationSeconds, 0.5);
-      const throughput = MOCK_THROUGHPUT[config.speed];
-      const totalSeconds = Math.min(
-        MOCK_MAX_SECONDS,
-        Math.max(MOCK_MIN_SECONDS, duration / throughput),
-      );
+  function onComplete(payload: CompleteEvent) {
+    if (!isCurrent(payload)) return;
 
-      const startedAt = Date.now();
+    setProgress(100);
+    setRemainingSeconds(0);
+    setSpeed(null);
 
-      timer.current = setInterval(() => {
-        const elapsed = (Date.now() - startedAt) / 1000;
-        const fraction = Math.min(1, elapsed / totalSeconds);
+    const context = pending.current;
+    const finished: EncodeResult = {
+      outputPath: payload.outputPath,
+      outputSizeBytes: payload.outputSizeBytes,
+      originalSizeBytes: context?.originalSizeBytes ?? 0,
+      posterPath: null,
+      posterSizeBytes: null,
+      webpPath: null,
+      webpSizeBytes: null,
+    };
 
-        setProgress(Math.round(fraction * 100));
-        // Real encoders wobble; a perfectly constant number looks fake.
-        setSpeed((duration / totalSeconds) * (0.94 + Math.random() * 0.12));
-        setRemainingSeconds(Math.max(0, Math.round(totalSeconds - elapsed)));
+    if (!context?.poster.enabled) {
+      finish(finished);
+      return;
+    }
 
-        if (fraction < 1) return;
+    // The video is already safe on disk. Whatever happens from here is at
+    // worst a warning.
+    setPhase("poster");
+    const job = payload.jobId;
 
-        stopTimer();
-        setProgress(100);
-        setRemainingSeconds(0);
-        setStatus("done");
-        setResult(finishedResult(config, context));
-      }, TICK_MS);
-    },
-    [stopTimer],
-  );
+    invoke<PosterResult>("generate_poster", {
+      videoPath: payload.outputPath,
+      timeSeconds: context.poster.timeSeconds,
+      alsoWebp: context.poster.alsoWebp,
+    })
+      .then((poster) => {
+        if (jobId.current !== job) return;
+        finish({
+          ...finished,
+          posterPath: poster.jpegPath,
+          posterSizeBytes: poster.jpegSizeBytes,
+          webpPath: poster.webpPath,
+          webpSizeBytes: poster.webpSizeBytes,
+        });
+      })
+      .catch((cause: unknown) => {
+        if (jobId.current !== job) return;
+        console.error("generate_poster failed:", cause);
+        setWarning(
+          typeof cause === "string"
+            ? cause
+            : "Náhledový obrázek se nepodařilo vytvořit. Video je ale hotové.",
+        );
+        finish(finished);
+      });
+  }
 
-  const cancel = useCallback(() => {
-    stopTimer();
+  function finish(value: EncodeResult) {
+    setPhase("video");
+    setResult(value);
+    setStatus("done");
+    jobId.current = null;
+    pending.current = null;
+  }
+
+  function onError(payload: ErrorEvent) {
+    if (!isCurrent(payload)) return;
+    setStatus("error");
+    setError(payload.message);
+    setSpeed(null);
+    setRemainingSeconds(null);
+    jobId.current = null;
+    pending.current = null;
+  }
+
+  function onCancelled(payload: CancelledEvent) {
+    if (!isCurrent(payload)) return;
     setStatus("cancelled");
     setSpeed(null);
     setRemainingSeconds(null);
-    // Phase 4 also deletes the partial file here.
-  }, [stopTimer]);
+    jobId.current = null;
+    pending.current = null;
+  }
 
-  const reset = useCallback(() => {
-    stopTimer();
-    setStatus("idle");
+  const start = useCallback((config: EncodeConfig, context: EncodeContext) => {
+    // A fresh id per run: any straggler from the previous job now fails the
+    // `isCurrent` check instead of painting over this one.
+    const job = crypto.randomUUID();
+    jobId.current = job;
+    pending.current = context;
+
+    setStatus("running");
+    setPhase("video");
     setProgress(0);
     setSpeed(null);
     setRemainingSeconds(null);
     setResult(null);
     setError(null);
-  }, [stopTimer]);
+    setWarning(null);
+
+    // The one place arguments are built, and the same array the summary step
+    // shows. Rust is handed the finished list.
+    const args = buildArgs(config);
+
+    invoke("start_encode", {
+      args,
+      durationSeconds: context.durationSeconds,
+      jobId: job,
+    }).catch((cause: unknown) => {
+      if (jobId.current !== job) return;
+      console.error("start_encode failed:", cause);
+      setStatus("error");
+      setError(typeof cause === "string" ? cause : START_FAILED);
+      jobId.current = null;
+      pending.current = null;
+    });
+  }, []);
+
+  const cancel = useCallback(() => {
+    const job = jobId.current;
+    if (job === null) return;
+
+    // The state change waits for `encode-cancelled`: Rust deletes the partial
+    // file only once the process is really gone, and the screen should not
+    // claim otherwise before then.
+    invoke("cancel_encode", { jobId: job }).catch((cause: unknown) => {
+      console.error("cancel_encode failed:", cause);
+    });
+  }, []);
+
+  const reset = useCallback(() => {
+    jobId.current = null;
+    pending.current = null;
+    setStatus("idle");
+    setPhase("video");
+    setProgress(0);
+    setSpeed(null);
+    setRemainingSeconds(null);
+    setResult(null);
+    setError(null);
+    setWarning(null);
+  }, []);
 
   return {
     status,
     progress,
+    phase,
     speed,
     remainingSeconds,
     result,
     error,
+    warning,
     start,
     cancel,
     reset,
   };
-}
-
-/** The numbers a real run would report, derived from the estimate. */
-function finishedResult(
-  config: EncodeConfig,
-  context: EncodeContext,
-): EncodeResult {
-  const posterPixels = config.width * config.height;
-  const posterBytes = Math.round(posterPixels * POSTER_BYTES_PER_PIXEL);
-
-  return {
-    outputPath: config.outputPath,
-    // The estimate is deliberately not exact; nudge it so nobody reads the
-    // result as proof the estimator is perfect.
-    outputSizeBytes: Math.round(context.estimatedSizeBytes * 1.04),
-    originalSizeBytes: context.originalSizeBytes,
-    posterPath: context.poster.enabled ? posterPathFor(config.outputPath, "jpg") : null,
-    posterSizeBytes: context.poster.enabled ? posterBytes : null,
-    webpPath:
-      context.poster.enabled && context.poster.alsoWebp
-        ? posterPathFor(config.outputPath, "webp")
-        : null,
-    webpSizeBytes:
-      context.poster.enabled && context.poster.alsoWebp
-        ? Math.round(posterBytes * WEBP_RATIO)
-        : null,
-  };
-}
-
-/** `clip-web.mp4` → `clip-web.jpg`, next to the video. */
-export function posterPathFor(outputPath: string, extension: "jpg" | "webp"): string {
-  const dot = outputPath.lastIndexOf(".");
-  const stem = dot <= 0 ? outputPath : outputPath.slice(0, dot);
-  return `${stem}.${extension}`;
 }

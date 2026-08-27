@@ -18,7 +18,6 @@ import { SummaryStep } from "./components/steps/SummaryStep";
 import { useEncoder } from "./hooks/useEncoder";
 import { useVideoMetadata } from "./hooks/useVideoMetadata";
 import { baseName } from "./lib/format";
-import { estimateSizeForConfig } from "./lib/size";
 import {
   STEPS,
   configFromState,
@@ -66,7 +65,7 @@ export default function App() {
 
   const config = useMemo(() => configFromState(state), [state]);
 
-  /** Runs the encode for real — or, in this phase, convincingly pretends to. */
+  /** Hands the finished configuration to ffmpeg and switches to the progress screen. */
   const runEncode = useCallback(() => {
     if (!config || !meta) return;
     setOverwriteAsked(false);
@@ -74,17 +73,11 @@ export default function App() {
     encoder.start(config, {
       durationSeconds: meta.durationSeconds,
       originalSizeBytes: meta.fileSizeBytes,
-      estimatedSizeBytes: estimateSizeForConfig(config, {
-        width: meta.width,
-        height: meta.height,
-        fps: state.fps,
-        durationSeconds: meta.durationSeconds,
-      }),
       poster: state.poster,
     });
 
     dispatch({ type: "goToStep", step: "progress" });
-  }, [config, meta, encoder, state.fps, state.poster]);
+  }, [config, meta, encoder, state.poster]);
 
   /** The final button: asks before it would overwrite something. */
   async function startEncode() {
@@ -245,7 +238,6 @@ export default function App() {
         return meta ? (
           <ProgressStep
             state={state}
-            meta={meta}
             encoder={encoder}
             onBackToSummary={() => {
               encoder.reset();
