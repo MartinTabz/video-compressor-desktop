@@ -60,6 +60,19 @@ suffix is the usual cause.
 npm run tauri dev
 ```
 
+## Tests
+
+```sh
+npm test          # Vitest — dimension math, quality mapping, ffmpeg arguments
+cd src-tauri && cargo test   # ffprobe parsing, rotation normalization
+```
+
+The frontend suite is pure logic and runs in Node with no DOM. It is the guard
+against the one bug that matters most in this app: scaling vertical video *up*
+instead of down.
+
+---
+
 ## Building
 
 ```sh
@@ -101,8 +114,13 @@ License; see `src/assets/fonts/LICENSE-Geist.txt`.
 src/                  React frontend
   styles/tokens.css   the only place colour is defined
   assets/fonts/       Geist Sans + Geist Mono, bundled locally
+  lib/orientation.ts  rotation, dimension math, resolution presets
+  lib/quality.ts      percent -> CRF, band labels
+  lib/size.ts         output size estimate
+  lib/ffmpegArgs.ts   buildArgs(config) — the command that actually runs
+  hooks/              thin wrappers around the Tauri commands
 src-tauri/
-  src/probe.rs        sidecar invocation
+  src/probe.rs        sidecar invocation, ffprobe parsing, VideoMetadata
   binaries/           gitignored, filled by scripts/fetch-binaries.sh
 scripts/
   fetch-binaries.sh
