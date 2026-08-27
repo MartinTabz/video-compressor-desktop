@@ -264,7 +264,7 @@ export default function App() {
 const STEP_HINTS: Partial<Record<StepId, string>> = {
   source: "Přetáhni video do okna, nebo ho vyber v počítači.",
   speed: SPEED_NOTE,
-  audio: "Co se má stát se zvukovou stopou.",
+  audio: "Co je ve zvukové stopě? Podle toho ji uložíme.",
   output: "Kam soubor uložit a jestli k němu chceš i náhledový obrázek.",
   summary: "Zkontroluj nastavení a spusť kompresi.",
 };

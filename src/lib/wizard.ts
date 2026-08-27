@@ -50,8 +50,10 @@ export const initialState: WizardState = {
   fps: 30,
   qualityPercent: DEFAULT_QUALITY_PERCENT,
   speed: DEFAULT_SPEED,
-  audioWanted: null,
-  audioMusic: null,
+  // Most sources are a talking head, so speech is the answer that is already
+  // right when the user arrives on the step.
+  audioWanted: true,
+  audioMusic: false,
   outputPath: "",
   poster: {
     enabled: false,
@@ -71,8 +73,7 @@ export type WizardAction =
   | { type: "setFps"; fps: number }
   | { type: "setQuality"; percent: number }
   | { type: "setSpeed"; speed: WizardState["speed"] }
-  | { type: "setAudioWanted"; wanted: boolean }
-  | { type: "setAudioMusic"; music: boolean }
+  | { type: "setAudioMode"; mode: AudioMode }
   | { type: "setOutputPath"; path: string }
   | { type: "setPosterEnabled"; enabled: boolean }
   | { type: "setPosterTime"; seconds: number }
@@ -169,16 +170,14 @@ export function wizardReducer(
     case "setSpeed":
       return { ...state, speed: action.speed };
 
-    case "setAudioWanted":
+    case "setAudioMode":
+      // The step asks one question with three answers; the two stored flags are
+      // just how that answer is spelled for `audioModeOf`.
       return {
         ...state,
-        audioWanted: action.wanted,
-        // Answering „Ne" retracts the follow-up question with it.
-        audioMusic: action.wanted ? state.audioMusic : null,
+        audioWanted: action.mode !== "none",
+        audioMusic: action.mode === "none" ? null : action.mode === "music",
       };
-
-    case "setAudioMusic":
-      return { ...state, audioMusic: action.music };
 
     case "setOutputPath":
       return { ...state, outputPath: action.path };

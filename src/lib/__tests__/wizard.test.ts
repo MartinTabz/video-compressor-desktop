@@ -117,24 +117,23 @@ describe("frame rate", () => {
 });
 
 describe("audio", () => {
-  it("needs both answers before the step is valid", () => {
+  it("starts on speech, so the step is valid on arrival", () => {
     const state = loaded();
-    expect(isStepValid(state, "audio")).toBe(false);
-
-    const wanted = wizardReducer(state, { type: "setAudioWanted", wanted: true });
-    expect(isStepValid(wanted, "audio")).toBe(false);
-
-    const answered = wizardReducer(wanted, { type: "setAudioMusic", music: false });
-    expect(audioModeOf(answered)).toBe("speech");
-    expect(isStepValid(answered, "audio")).toBe(true);
+    expect(audioModeOf(state)).toBe("speech");
+    expect(isStepValid(state, "audio")).toBe(true);
   });
 
-  it("retracts the music answer when the user goes back to „Ne“", () => {
-    const music = wizardReducer(
-      wizardReducer(loaded(), { type: "setAudioWanted", wanted: true }),
-      { type: "setAudioMusic", music: true },
-    );
-    const none = wizardReducer(music, { type: "setAudioWanted", wanted: false });
+  it("round-trips every mode", () => {
+    for (const mode of ["none", "speech", "music"] as const) {
+      const state = wizardReducer(loaded(), { type: "setAudioMode", mode });
+      expect(audioModeOf(state)).toBe(mode);
+      expect(isStepValid(state, "audio")).toBe(true);
+    }
+  });
+
+  it("retracts the music answer when the user picks „Bez zvuku“", () => {
+    const music = wizardReducer(loaded(), { type: "setAudioMode", mode: "music" });
+    const none = wizardReducer(music, { type: "setAudioMode", mode: "none" });
 
     expect(none.audioMusic).toBeNull();
     expect(audioModeOf(none)).toBe("none");
