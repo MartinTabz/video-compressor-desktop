@@ -26,9 +26,20 @@
     @apply font-sans text-label font-medium uppercase tracking-label text-text-muted;
   }
 
-  /* Step title: 24px/600 with tight tracking. */
+  /* Step title: Bricolage Grotesque Bold at 24px with tight tracking. The
+     heading role is never lighter than 700 — that is the whole point of it. */
   .step-title {
-    @apply font-sans text-title font-semibold tracking-title text-text;
+    @apply font-display text-title font-bold tracking-title text-text;
+  }
+
+  /*
+   * The one number per screen that carries the result: the estimated size on
+   * the summary, the before/after on the result screen. ExtraBold display,
+   * one scale step above a step title, and nowhere else.
+   */
+  .figure {
+    @apply font-display text-figure font-extrabold tracking-figure text-text;
+    font-variant-numeric: tabular-nums;
   }
 
   /*

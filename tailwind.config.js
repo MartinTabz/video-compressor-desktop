@@ -49,16 +49,21 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Geist Sans"', "system-ui", "-apple-system", "sans-serif"],
+        // Three roles, three families. Components name the role, never the file.
+        display: ['"Bricolage Grotesque"', "system-ui", "-apple-system", "sans-serif"],
+        sans: ['"Familjen Grotesk"', "system-ui", "-apple-system", "sans-serif"],
         mono: ['"Geist Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       fontSize: {
         label: ["12px", "16px"],
         body: ["14px", "20px"],
         title: ["24px", "30px"],
+        // The one number that gets the ExtraBold display treatment.
+        figure: ["32px", "36px"],
       },
       letterSpacing: {
         title: "-0.02em",
+        figure: "-0.03em",
         label: "0.06em",
       },
       maxWidth: {

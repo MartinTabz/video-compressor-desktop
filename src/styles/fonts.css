@@ -1,10 +1,49 @@
-/* Geist Sans and Geist Mono, bundled locally. No CDN request from the desktop app. */
-/* Both are variable fonts (wght 100-900) and cover the full Czech character set. */
+/*
+ * All three families are bundled locally as woff2. No CDN request from the
+ * desktop app, and every face covers the full Czech character set.
+ *
+ * Bricolage Grotesque — display. Headings only, and only thick: 700 for step
+ * titles, 800 reserved for the single largest number on screen.
+ * Familjen Grotesk  — body and UI. 400 text, 500 labels and buttons, 600 emphasis.
+ * Geist Mono        — data. Variable, but the app draws a single weight from it.
+ */
 
 @font-face {
-  font-family: "Geist Sans";
-  src: url("../assets/fonts/Geist-Variable.woff2") format("woff2-variations");
-  font-weight: 100 900;
+  font-family: "Bricolage Grotesque";
+  src: url("../assets/fonts/BricolageGrotesque-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("../assets/fonts/BricolageGrotesque-ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Familjen Grotesk";
+  src: url("../assets/fonts/FamiljenGrotesk-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Familjen Grotesk";
+  src: url("../assets/fonts/FamiljenGrotesk-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Familjen Grotesk";
+  src: url("../assets/fonts/FamiljenGrotesk-SemiBold.woff2") format("woff2");
+  font-weight: 600;
   font-style: normal;
   font-display: block;
 }

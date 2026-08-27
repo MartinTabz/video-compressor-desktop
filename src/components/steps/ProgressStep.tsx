@@ -173,10 +173,12 @@ function ResultView({
     <div className="flex flex-col gap-8">
       <div className="flex items-center gap-3">
         <CheckCircle2 className="h-6 w-6 shrink-0 text-success" aria-hidden="true" />
-        <p className="font-mono text-title text-text">
+        <p className="figure">
           {formatBytes(result.originalSizeBytes)} →{" "}
           <span className="text-success">{formatBytes(result.outputSizeBytes)}</span>
-          <span className="ml-3 text-body text-text-muted">(úspora {savings} %)</span>
+          <span className="ml-3 font-sans text-body font-normal tracking-normal text-text-muted">
+            (úspora {savings} %)
+          </span>
         </p>
       </div>
 

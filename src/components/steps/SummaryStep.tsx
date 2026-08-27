@@ -109,9 +109,9 @@ export function SummaryStep({ state, meta, onEdit, onStart }: SummaryStepProps) 
 
       <div className="flex items-baseline justify-between rounded-card border border-border bg-surface p-4">
         <span className="label">Odhadovaná velikost</span>
-        <span className="font-mono text-title text-accent">
+        <span className="figure text-accent">
           {formatEstimate(estimate)}
-          <span className="ml-3 text-body text-text-muted">
+          <span className="ml-3 font-sans text-body font-normal tracking-normal text-text-muted">
             (úspora {savings} %)
           </span>
         </span>
